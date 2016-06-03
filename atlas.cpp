@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QTextStream>
 #include <QMutex>
+#include <QDebug>
 
 CAtlasServer atlasServer;
 QMutex atlasMutex;
@@ -56,8 +57,8 @@ static AtlInitEngineDataType *AtlInitEngineData = 0;
 //typedef int __cdecl SetTransStateType(int dunno);
 //static SetTransStateType *SetTransState = 0;
 
-typedef int __cdecl ChangeDirectionType(int dir);
-static ChangeDirectionType *ChangeDirection = 0;
+//typedef int __cdecl ChangeDirectionType(int dir);
+//static ChangeDirectionType *ChangeDirection = 0;
 
 typedef int __cdecl FreeAtlasDataType(void *mem, void *noSureHowManyArgs, void *, void *);
 static FreeAtlasDataType *FreeAtlasData = 0;
@@ -78,6 +79,7 @@ CAtlasServer::CAtlasServer()
 {
     m_atlasVersion = 0;
     m_atlasTransDirection = Atlas_JE;
+    m_internalDirection = Atlas_JE;
     m_atlasHappy = false;
 
     h_atlecont = 0;
@@ -105,6 +107,7 @@ int CAtlasServer::getTransDirection()
 void CAtlasServer::uninit()
 {
     m_atlasTransDirection = Atlas_JE;
+    m_internalDirection = Atlas_JE;
     m_atlasVersion = 0;
     if (isLoaded())
 		DestroyEngine();
@@ -127,6 +130,17 @@ void CAtlasServer::uninit()
     m_atlasHappy = false;
 }
 
+bool CAtlasServer::haveJapanese(const QString &str)
+{
+    for (int i=0;i<str.length();i++) {
+        ushort u = str.at(i).unicode();
+        if (u>=0x3040 && u<=0x309f) return true; // hiragana
+        if (u>=0x30a0 && u<=0x30ff) return true; // katakana
+        if (u>=0x4e00 && u<=0x9fff) return true; // CJK
+    }
+    return false;
+}
+
 QString CAtlasServer::translate(AtlasDirection transDirection, const QString &str)
 {
     if (!isLoaded()) return QString("ERR");
@@ -137,9 +151,29 @@ QString CAtlasServer::translate(AtlasDirection transDirection, const QString &st
     char *temp = toSJIS(str).data();
 
     atlasMutex.lock();
+    AtlasDirection od = m_internalDirection;
     if (m_atlasTransDirection != transDirection) {
         m_atlasTransDirection = transDirection;
-        ChangeDirection(m_atlasTransDirection);
+
+        if (m_atlasTransDirection==Atlas_Auto) {
+            if (haveJapanese(str))
+                m_internalDirection=Atlas_JE;
+            else
+                m_internalDirection=Atlas_EJ;
+        } else
+            m_internalDirection=m_atlasTransDirection;
+
+    } else if (m_atlasTransDirection==Atlas_Auto) {
+        if (m_internalDirection==Atlas_JE && !haveJapanese(str))
+            m_internalDirection=Atlas_EJ;
+        else if (m_internalDirection==Atlas_EJ && haveJapanese(str))
+            m_internalDirection=Atlas_JE;
+    }
+
+    if (od!=m_internalDirection) {
+        qDebug() << "Change direction to " << m_internalDirection;
+        if (!init(m_internalDirection, m_environment, true))
+            return QString("ERR");
     }
 
     // I completely ignore return value.  Not sure if it matters.
@@ -225,14 +259,13 @@ bool CAtlasServer::isLoaded()
     return m_atlasHappy;
 }
 
-bool CAtlasServer::init(AtlasDirection transDirection, const QString& environment)
+bool CAtlasServer::init(AtlasDirection transDirection, const QString& environment, bool forceDirectionChange)
 {
+    AtlasDirection md = m_atlasTransDirection;
+
     if (isLoaded())
-    {
-        if (m_atlasTransDirection == transDirection)
-            return true;
         uninit();
-    }
+
     if (!loadDLLs()) return false;
 
     if (h_atlecont && h_awdict &&
@@ -240,8 +273,8 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
             (DestroyEngine = (DestroyEngineType*) GetProcAddress(h_atlecont, "DestroyEngine")) &&
             (TranslatePair = (TranslatePairType*) GetProcAddress(h_atlecont, "TranslatePair")) &&
             (FreeAtlasData = (FreeAtlasDataType*) GetProcAddress(h_atlecont, "FreeAtlasData")) &&
-            (AtlInitEngineData = (AtlInitEngineDataType*) GetProcAddress(h_atlecont, "AtlInitEngineData")) &&
-            (ChangeDirection = (ChangeDirectionType*) GetProcAddress(h_atlecont, "ChangeDirection"))
+            (AtlInitEngineData = (AtlInitEngineDataType*) GetProcAddress(h_atlecont, "AtlInitEngineData"))
+//            (ChangeDirection = (ChangeDirectionType*) GetProcAddress(h_atlecont, "ChangeDirection"))
 //            (SetTransState = (SetTransStateType*) GetProcAddress(h_atlecont, "SetTransState")) &&
 //            (AwuDlgAtlasPopupEnvDetailSet = (AwuDlgAtlasPopupEnvDetailSetType*)(h_awuenv, "AwuDlgAtlasPopupEnvDetailSet")) &&
 //            (AwuWordDel = (AwuWordDelType*) GetProcAddress(h_awdict, "AwuWordDel"))
@@ -255,7 +288,11 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
         if (0 == AtlInitEngineData(0, 2, dunno, 0, dunno2) &&
                 1 == CreateEngine(1, (int)transDirection, 0, toSJIS(m_environment).data()))
         {
-            m_atlasTransDirection = transDirection;
+            if (forceDirectionChange)
+                m_atlasTransDirection = md;
+            else
+                m_atlasTransDirection = transDirection;
+            m_internalDirection = transDirection;
             m_atlasHappy = true;
             return true;
         }

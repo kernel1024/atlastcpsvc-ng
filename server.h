@@ -10,6 +10,7 @@ class CServer : public QTcpServer
 {
 public:
     CServer(bool interactive, QObject *parent = 0);
+    ~CServer();
 
     void pause();
 
@@ -45,6 +46,7 @@ public:
 
 public slots:
     bool saveSettings();
+    void closeSocket();
 
 private slots:
     void readClient();

@@ -19,6 +19,7 @@ class CAtlasServer : public QObject
 
 public:
     enum AtlasDirection {
+        Atlas_Auto = 0,
         Atlas_JE = 1,
         Atlas_EJ = 2
     };
@@ -29,7 +30,7 @@ public:
     // returns 0 if not initialized.
     int getTransDirection();
 
-    bool init(AtlasDirection transDirection, const QString &environment);
+    bool init(AtlasDirection transDirection, const QString &environment, bool forceDirectionChange = false);
     void uninit();
     bool loadDLLs();
 
@@ -39,11 +40,13 @@ public:
     QString translate(AtlasDirection transDirection, const QString &str);
     QStringList getEnvironments();
 
+    bool haveJapanese(const QString &str);
 private:
     QString m_environment;
     QString atlasPath;
     int m_atlasVersion;
     AtlasDirection m_atlasTransDirection;
+    AtlasDirection m_internalDirection;
     bool m_atlasHappy;
 
     HMODULE h_atlecont;

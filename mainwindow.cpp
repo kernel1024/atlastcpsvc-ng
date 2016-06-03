@@ -25,6 +25,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->btnSave,&QPushButton::clicked,this,&MainWindow::saveSettings);
 
     daemon = new CServer(true, this);
+    connect(qApp,&QApplication::aboutToQuit,[this](){
+        daemon->closeSocket();
+        QApplication::processEvents();
+    });
 
     if (!daemon->isListening())
         QMessageBox::critical(0,tr("AtlasTCPSvc-NG"),

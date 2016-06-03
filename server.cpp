@@ -28,6 +28,11 @@ CServer::CServer(bool interactive, QObject *parent)
     listen(QHostAddress::AnyIPv4, m_port);
 }
 
+CServer::~CServer()
+{
+    closeSocket();
+}
+
 void CServer::pause()
 {
     m_disabled = true;
@@ -167,8 +172,10 @@ void CServer::readClient()
                 dir.replace("DIR:", "");
                 if (dir.startsWith("JE"))
                     m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_JE;
-                else
+                else if (dir.startsWith("EJ"))
                     m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_EJ;
+                else
+                    m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_Auto;
                 socket->write("OK\r\n");
                 handled = true;
             } else if (cmd.startsWith("FIN"))
@@ -186,7 +193,7 @@ void CServer::readClient()
                 if (s.isEmpty())
                     socket->write("ERR:NULL_STR_DECODED\r\n");
                 else {
-                    s = atlasServer.translate(m_direction.value(socket->socketDescriptor(),s);
+                    s = atlasServer.translate(m_direction.value(socket->socketDescriptor(),CAtlasServer::Atlas_JE),s);
                     if (s.startsWith("ERR"))
                         socket->write("ERR:TRANS_FAILED\r\n");
                     else {
@@ -220,6 +227,12 @@ void CServer::discardClient()
 {
     QSslSocket* socket = (QSslSocket*)sender();
     socket->deleteLater();
+}
+
+void CServer::closeSocket()
+{
+    if (isListening())
+        close();
 }
 
 bool CServer::saveSettings()
