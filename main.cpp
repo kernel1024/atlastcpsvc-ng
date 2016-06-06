@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QMessageBox>
+#include <QSysInfo>
 #include "mainwindow.h"
 #include "service.h"
 
@@ -13,7 +14,9 @@ int main(int argc, char *argv[])
     if (CService::testProcessToken(CService::Process_IsInteractive) &&
             (args.contains("elevated") || args.count()<=1))
     {
-        if (!CService::testProcessToken(CService::Process_HaveAdminRights)) {
+        // Request to restart with elevated privileges on Vista+ using UAC
+        if ((QSysInfo::windowsVersion()>=QSysInfo::WV_VISTA) &&
+                (!CService::testProcessToken(CService::Process_HaveAdminRights))) {
             if (!CService::restartAsAdmin(argc, argv))
                 QMessageBox::critical(0,QString("AtlasTCPSvc-NG"),
                                       QString("Failed to start with elevated privileges. Start aborted."));
