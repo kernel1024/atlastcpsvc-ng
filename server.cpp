@@ -219,14 +219,10 @@ void CServer::readClient()
             socket->close();
         }
     }
-    if (socket->state() == QTcpSocket::UnconnectedState)
-        socket->deleteLater();
 }
 
 void CServer::discardClient()
 {
-    QSslSocket* socket = (QSslSocket*)sender();
-    socket->deleteLater();
 }
 
 void CServer::closeSocket()
