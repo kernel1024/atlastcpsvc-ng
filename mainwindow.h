@@ -36,6 +36,8 @@ public slots:
     void updatePort(int port);
     void changeEnvironment(const QString &env);
     void saveSettings();
+    void installSerivce();
+    void uninstallSerivce();
 };
 
 #endif // MAINWINDOW_H

@@ -16,6 +16,7 @@ public:
     CService(int argc, char **argv);
     static bool testProcessToken(ProcessToken checkToken);
     static bool restartAsAdmin(int argc, char *argv[]);
+    static QString getCurrentUserName();
 protected:
     void start();
     void pause();

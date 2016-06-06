@@ -1,5 +1,6 @@
 #include <QFileInfo>
 #include <windows.h>
+#include <lmcons.h>
 #include "service.h"
 
 bool CService::restartAsAdmin(int argc, char *argv[])
@@ -36,6 +37,15 @@ bool CService::restartAsAdmin(int argc, char *argv[])
         return false; // Failed to execute process
 
     return true;
+}
+
+QString CService::getCurrentUserName()
+{
+    wchar_t acUserName[UNLEN+1];
+    DWORD nUserName = sizeof(acUserName);
+    if (GetUserName(acUserName, &nUserName))
+        return QString::fromWCharArray(acUserName);
+    return QString();
 }
 
 bool CService::testProcessToken(ProcessToken checkToken)

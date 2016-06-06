@@ -5,6 +5,7 @@
 #include <QInputDialog>
 #include "mainwindow.h"
 #include "atlas.h"
+#include "service.h"
 #include "ui_mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -24,6 +25,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->listEnvironment,SIGNAL(currentIndexChanged(QString)),
             this,SLOT(changeEnvironment(QString)));
     connect(ui->btnSave,&QPushButton::clicked,this,&MainWindow::saveSettings);
+    connect(ui->btnSvcInstall,&QPushButton::clicked,this,&MainWindow::installSerivce);
+    connect(ui->btnSvcUninstall,&QPushButton::clicked,this,&MainWindow::uninstallSerivce);
 
     daemon = new CServer(true, this);
     connect(qApp,&QApplication::aboutToQuit,[this](){
@@ -38,18 +41,6 @@ MainWindow::MainWindow(QWidget *parent) :
 
     ui->btnSvcInstall->setEnabled(false);
     ui->btnSvcUninstall->setEnabled(false);
-    connect(ui->btnSvcInstall,&QPushButton::clicked,[this](){
-        if (m_svctl!=NULL && !m_svctl->isInstalled())
-            if (!m_svctl->install(qApp->applicationFilePath()))
-                QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
-                                      tr("Unable to install service."));
-        updateServiceController();
-    });
-    connect(ui->btnSvcUninstall,&QPushButton::clicked,[this](){
-        if (m_svctl!=NULL && m_svctl->isInstalled())
-            m_svctl->uninstall();
-        updateServiceController();
-    });
 
     initializeUiParams();
 }
@@ -226,4 +217,29 @@ void MainWindow::saveSettings()
         QMessageBox::information(this,tr("AtlasTCPSvc-NG"),
                                  tr("Service settings saved."
                                     "You can now restart server."));
+}
+
+void MainWindow::installSerivce()
+{
+    QString user = CService::getCurrentUserName();
+    bool ok;
+    QString pass = QInputDialog::getText(this,tr("AtlasTCPSvc-NG service installation"),
+                                         tr("Your password for account '%1' "
+                                            "(will be used for service setup)").arg(user),
+                                         QLineEdit::Password,QString(),&ok);
+    if (!ok) return;
+    if (m_svctl!=NULL && !m_svctl->isInstalled())
+        if (!m_svctl->install(qApp->applicationFilePath(),user,pass))
+            QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
+                                  tr("Unable to install service."));
+    updateServiceController();
+}
+
+void MainWindow::uninstallSerivce()
+{
+    if (m_svctl!=NULL && m_svctl->isInstalled())
+        if (!m_svctl->uninstall())
+            QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
+                                  tr("Unable to uninstall service."));
+    updateServiceController();
 }
