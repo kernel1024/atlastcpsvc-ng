@@ -12,6 +12,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    m_svctl = NULL;
 
     connect(ui->btnAddToken,&QPushButton::clicked,this,&MainWindow::addToken);
     connect(ui->btnDeleteToken,&QPushButton::clicked,this,&MainWindow::delToken);
@@ -33,7 +34,22 @@ MainWindow::MainWindow(QWidget *parent) :
     if (!daemon->isListening())
         QMessageBox::critical(0,tr("AtlasTCPSvc-NG"),
                               tr("Failed to start ATLAS server. "
-                                 "Maybe port is in use, or ATLAS engine initialization error"));
+                                 "Maybe port is in use, or ATLAS engine initialization error."));
+
+    ui->btnSvcInstall->setEnabled(false);
+    ui->btnSvcUninstall->setEnabled(false);
+    connect(ui->btnSvcInstall,&QPushButton::clicked,[this](){
+        if (m_svctl!=NULL && !m_svctl->isInstalled())
+            if (!m_svctl->install(qApp->applicationFilePath()))
+                QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
+                                      tr("Unable to install service."));
+        updateServiceController();
+    });
+    connect(ui->btnSvcUninstall,&QPushButton::clicked,[this](){
+        if (m_svctl!=NULL && m_svctl->isInstalled())
+            m_svctl->uninstall();
+        updateServiceController();
+    });
 
     initializeUiParams();
 }
@@ -41,6 +57,19 @@ MainWindow::MainWindow(QWidget *parent) :
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::updateServiceController(QtServiceController *svctl)
+{
+    if (svctl!=NULL)
+        m_svctl = svctl;
+
+    ui->btnSvcInstall->setEnabled(false);
+    ui->btnSvcUninstall->setEnabled(false);
+    if (m_svctl==NULL) return;
+
+    ui->btnSvcInstall->setEnabled(!m_svctl->isInstalled());
+    ui->btnSvcUninstall->setEnabled(m_svctl->isInstalled());
 }
 
 void MainWindow::initializeUiParams()

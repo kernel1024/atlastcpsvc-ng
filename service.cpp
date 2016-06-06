@@ -1,7 +1,44 @@
+#include <QFileInfo>
 #include <windows.h>
 #include "service.h"
 
-bool CService::isInteractiveSession()
+bool CService::restartAsAdmin(int argc, char *argv[])
+{
+    if (argc<1) return false;
+    QStringList args;
+    for (int i=0;i<argc;i++)
+        args.append(QString::fromLocal8Bit(argv[i]));
+    QString appFullPath = args.at(0);
+    if (args.contains("elevated")) {
+        qCritical() << "Recursive start detected. Aborting.";
+        return false;
+    }
+
+    QFileInfo fi(appFullPath);
+    if (!fi.exists()) {
+        qCritical() << "Self exe not found. Incorrect argv[0] parameter.";
+        return false;
+    }
+    // Setup the required structure
+    SHELLEXECUTEINFO ShExecInfo;
+    memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFO));
+    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    ShExecInfo.lpVerb = L"runas";
+    ShExecInfo.lpFile = NULL;
+    if (appFullPath.length() > 0)
+        ShExecInfo.lpFile = reinterpret_cast<const WCHAR *>(appFullPath.utf16());
+    ShExecInfo.lpParameters = L"elevated";
+    ShExecInfo.nShow = SW_SHOW;
+
+    // Spawn the process
+    if (ShellExecuteEx(&ShExecInfo) == FALSE)
+        return false; // Failed to execute process
+
+    return true;
+}
+
+bool CService::testProcessToken(ProcessToken checkToken)
 {
     HANDLE hProcessToken = NULL;
     DWORD groupLength = 50;
@@ -14,7 +51,7 @@ bool CService::isInteractiveSession()
     DWORD i;
 
     // Start with assumption that process is an EXE, not a Service.
-    bool fExe = true;
+    bool fret = true;
 
     if (!OpenProcessToken(GetCurrentProcess(),
                           TOKEN_QUERY,
@@ -37,8 +74,19 @@ bool CService::isInteractiveSession()
         if (groupInfo == NULL)
             goto ret;
 
-        if (!GetTokenInformation(hProcessToken, TokenGroups, groupInfo,
-            groupLength, &groupLength))
+        if (checkToken==Process_IsInteractive) {
+            if (!GetTokenInformation(hProcessToken, TokenGroups, groupInfo,
+                                     groupLength, &groupLength))
+                goto ret;
+        } else if (checkToken==Process_HaveAdminRights) {
+            fret = false;
+            TOKEN_ELEVATION elevation;
+            DWORD cbSize = sizeof(TOKEN_ELEVATION);
+            if (GetTokenInformation(hProcessToken, TokenElevation, &elevation,
+                                    sizeof(elevation), &cbSize))
+                fret = elevation.TokenIsElevated!=0;
+            goto ret;
+        } else
             goto ret;
     }
 
@@ -59,12 +107,12 @@ bool CService::isInteractiveSession()
         if (EqualSid(Sid, InteractiveSid))
             goto ret;
         else if (EqualSid(Sid, ServiceSid)) {
-            fExe = false;
+            fret = false;
             goto ret;
         }
     }
 
-    fExe = false;
+    fret = false;
 
 ret:
     if (InteractiveSid)
@@ -76,14 +124,15 @@ ret:
     if (hProcessToken)
         CloseHandle(hProcessToken);
 
-    return(fExe);
+    return(fret);
 }
 
 CService::CService(int argc, char **argv)
     : QtService<QCoreApplication>(argc, argv, "ATLAS TCP NG Service")
 {
-    setServiceDescription("ATLAS TCP service with SSL support, implemented with Qt");
+    setServiceDescription("ATLAS translation engine TCP service with SSL support, implemented with Qt.");
     setServiceFlags(QtServiceBase::CanBeSuspended);
+    setStartupType(QtServiceController::AutoStartup);
 }
 
 void CService::start()

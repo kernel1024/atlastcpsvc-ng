@@ -24,3 +24,8 @@ HEADERS  += mainwindow.h \
 FORMS    += mainwindow.ui
 
 include(qtservice/src/qtservice.pri)
+
+RC_FILE = atlastcpsvc-ng.rc
+
+DISTFILES += \
+    atlastcpsvc-ng.rc

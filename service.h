@@ -8,9 +8,14 @@
 class CService : public QtService<QCoreApplication>
 {
 public:
-    CService(int argc, char **argv);
-    static bool isInteractiveSession();
+    enum ProcessToken {
+        Process_IsInteractive,
+        Process_HaveAdminRights
+    };
 
+    CService(int argc, char **argv);
+    static bool testProcessToken(ProcessToken checkToken);
+    static bool restartAsAdmin(int argc, char *argv[]);
 protected:
     void start();
     void pause();

@@ -1,0 +1,27 @@
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEOS 0x4
+FILETYPE 0x0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "ATLAS TCP service NG"
+      VALUE "FileVersion", "1.0.0.0"
+      VALUE "InternalName", "AtlasTCPSvc-NG"
+      VALUE "LegalCopyright", "kernel1024, 2016"
+      VALUE "OriginalFilename", "atlastcpsvc-ng.exe"
+      VALUE "ProductName", "AtlasTCPSvc-NG"
+      VALUE "ProductVersion", "1.0.0.0"
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+        VALUE "Translation", 0x0409, 0x04B0
+  END
+END
+
+2 ICON "trans.ico"

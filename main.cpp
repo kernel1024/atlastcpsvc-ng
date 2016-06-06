@@ -1,17 +1,33 @@
 #include <QApplication>
-#include <QSettings>
+#include <QMessageBox>
 #include "mainwindow.h"
 #include "service.h"
 
 int main(int argc, char *argv[])
 {
-    if (CService::isInteractiveSession()) {
+    QStringList args;
+    for (int i=0;i<argc;i++)
+        args.append(QString::fromLocal8Bit(argv[i]));
+
+    CService service(argc, argv);
+    if (CService::testProcessToken(CService::Process_IsInteractive) &&
+            (args.contains("elevated") || args.count()<=1))
+    {
+        if (!CService::testProcessToken(CService::Process_HaveAdminRights)) {
+            if (!CService::restartAsAdmin(argc, argv))
+                QMessageBox::critical(0,QString("AtlasTCPSvc-NG"),
+                                      QString("Failed to start with elevated privileges. Start aborted."));
+            return 0;
+        }
+
         QApplication a(argc, argv);
         MainWindow w;
+
+        QtServiceController ctl(service.serviceName());
+        w.updateServiceController(&ctl);
+
         w.show();
         return a.exec();
-    } else {
-        CService service(argc, argv);
+    } else
         return service.exec();
-    }
 }
