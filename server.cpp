@@ -16,6 +16,8 @@ CServer::CServer(bool interactive, QObject *parent)
 
     loadSettings();
 
+    connect(this, &CServer::newConnection, this, &CServer::acceptConnection);
+
     qInfo() << "Initializing ATLAS...";
     if (!atlasServer.isLoaded())
         if (!atlasServer.init(CAtlasServer::Atlas_JE, m_atlasEnv))
@@ -130,10 +132,27 @@ void CServer::incomingConnection(int socket)
         return;
 
     QSslSocket* s = new QSslSocket(this);
-    connect(s, &QSslSocket::disconnected, this, &CServer::discardClient);
-    if (s->setSocketDescriptor(socket)) {
+    if (s->setSocketDescriptor(socket))
         addPendingConnection(s);
+}
+
+void CServer::acceptConnection()
+{
+    while (hasPendingConnections()) {
+        QTcpSocket* ts = nextPendingConnection();
+        QSslSocket* s = qobject_cast<QSslSocket *>(ts);
+        // Accept only ssl sockets, close others.
+        if (s==NULL) {
+            if (ts!=NULL) {
+                ts->close();
+                ts->deleteLater();
+            }
+            return;
+        }
+
+        connect(s, &QSslSocket::disconnected, this, &CServer::discardClient);
         connect(s, &QSslSocket::readyRead, this, &CServer::readClient);
+
         s->setPrivateKey(m_privateKey);
         s->setLocalCertificate(m_serverCert);
         s->startServerEncryption();
@@ -142,6 +161,8 @@ void CServer::incomingConnection(int socket)
 
 void CServer::readClient()
 {
+    // TODO: replace authList with userData inside of socket object
+
     if (m_disabled)
         return;
 
@@ -223,6 +244,9 @@ void CServer::readClient()
 
 void CServer::discardClient()
 {
+    QSslSocket* s = qobject_cast<QSslSocket *>(sender());
+    if (s!=NULL)
+        s->deleteLater();
 }
 
 void CServer::closeSocket()

@@ -51,6 +51,7 @@ public slots:
 private slots:
     void readClient();
     void discardClient();
+    void acceptConnection();
 
 };
 
