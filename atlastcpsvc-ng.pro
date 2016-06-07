@@ -14,12 +14,14 @@ SOURCES += main.cpp\
         mainwindow.cpp \
     atlas.cpp \
     service.cpp \
-    server.cpp
+    server.cpp \
+    atlassocket.cpp
 
 HEADERS  += mainwindow.h \
     atlas.h \
     service.h \
-    server.h
+    server.h \
+    atlassocket.h
 
 FORMS    += mainwindow.ui \
     logindlg.ui

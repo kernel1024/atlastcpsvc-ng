@@ -1,10 +1,10 @@
 #include <QSettings>
 #include <QTcpSocket>
-#include <QSslSocket>
 #include <QUrl>
 #include "qtservice.h"
 #include "server.h"
 #include "service.h"
+#include "atlassocket.h"
 #include <QDebug>
 
 CServer::CServer(bool interactive, QObject *parent)
@@ -131,7 +131,7 @@ void CServer::incomingConnection(int socket)
     if (m_disabled)
         return;
 
-    QSslSocket* s = new QSslSocket(this);
+    CAtlasSocket* s = new CAtlasSocket(this);
     if (s->setSocketDescriptor(socket))
         addPendingConnection(s);
 }
@@ -140,8 +140,8 @@ void CServer::acceptConnection()
 {
     while (hasPendingConnections()) {
         QTcpSocket* ts = nextPendingConnection();
-        QSslSocket* s = qobject_cast<QSslSocket *>(ts);
-        // Accept only ssl sockets, close others.
+        CAtlasSocket* s = qobject_cast<CAtlasSocket *>(ts);
+        // Accept only our sockets, close others.
         if (s==NULL) {
             if (ts!=NULL) {
                 ts->close();
@@ -150,8 +150,8 @@ void CServer::acceptConnection()
             return;
         }
 
-        connect(s, &QSslSocket::disconnected, this, &CServer::discardClient);
-        connect(s, &QSslSocket::readyRead, this, &CServer::readClient);
+        connect(s, &CAtlasSocket::disconnected, this, &CServer::discardClient);
+        connect(s, &CAtlasSocket::readyRead, this, &CServer::readClient);
 
         s->setPrivateKey(m_privateKey);
         s->setLocalCertificate(m_serverCert);
@@ -161,12 +161,12 @@ void CServer::acceptConnection()
 
 void CServer::readClient()
 {
-    // TODO: replace authList with userData inside of socket object
 
     if (m_disabled)
         return;
 
-    QSslSocket* socket = (QSslSocket*)sender();
+    CAtlasSocket* socket = qobject_cast<CAtlasSocket *>(sender());
+    if (socket==NULL) return;
     if (!socket->isEncrypted()) return;
 
     bool needCloseSocket = false;
@@ -178,32 +178,30 @@ void CServer::readClient()
             QString token = cmd;
             token.replace("INIT:", "");
             if (m_clientTokens.contains(token)) {
-                m_authList.append(socket->socketDescriptor());
-                m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_JE;
+                socket->setAuthenticated(true);
+                socket->setDirection(CAtlasServer::Atlas_JE);
                 socket->write("OK\r\n");
             } else {
                 socket->write("ERR:NOT_AUTHORIZED\r\n");
                 needCloseSocket = true;
             }
             handled = true;
-        } else if (m_authList.contains(socket->socketDescriptor())) {
+        } else if (socket->authenticated()) {
             if (cmd.startsWith("DIR:"))
             {
                 QString dir = cmd.toUpper();
                 dir.replace("DIR:", "");
                 if (dir.startsWith("JE"))
-                    m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_JE;
+                    socket->setDirection(CAtlasServer::Atlas_JE);
                 else if (dir.startsWith("EJ"))
-                    m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_EJ;
+                    socket->setDirection(CAtlasServer::Atlas_EJ);
                 else
-                    m_direction[socket->socketDescriptor()]=CAtlasServer::Atlas_Auto;
+                    socket->setDirection(CAtlasServer::Atlas_Auto);
                 socket->write("OK\r\n");
                 handled = true;
             } else if (cmd.startsWith("FIN"))
             {
                 socket->write("OK\r\n");
-                m_authList.removeAll(socket->socketDescriptor());
-                m_direction.remove(socket->socketDescriptor());
                 needCloseSocket = true;
                 handled = true;
             } else if (cmd.startsWith("TR:"))
@@ -214,7 +212,7 @@ void CServer::readClient()
                 if (s.isEmpty())
                     socket->write("ERR:NULL_STR_DECODED\r\n");
                 else {
-                    s = atlasServer.translate(m_direction.value(socket->socketDescriptor(),CAtlasServer::Atlas_JE),s);
+                    s = atlasServer.translate(socket->direction(),s);
                     if (s.startsWith("ERR"))
                         socket->write("ERR:TRANS_FAILED\r\n");
                     else {
@@ -233,10 +231,7 @@ void CServer::readClient()
         socket->flush();
 
         if (needCloseSocket) {
-            if (m_authList.contains(socket->socketDescriptor())) {
-                m_authList.removeAll(socket->socketDescriptor());
-                m_direction.remove(socket->socketDescriptor());
-            }
+            socket->setAuthenticated(false);
             socket->close();
         }
     }
@@ -244,7 +239,7 @@ void CServer::readClient()
 
 void CServer::discardClient()
 {
-    QSslSocket* s = qobject_cast<QSslSocket *>(sender());
+    CAtlasSocket* s = qobject_cast<CAtlasSocket *>(sender());
     if (s!=NULL)
         s->deleteLater();
 }

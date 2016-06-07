@@ -23,9 +23,7 @@ private:
     QSslCertificate m_serverCert;
     bool m_interactive;
     QStringList m_clientTokens;
-    QList<qintptr> m_authList;
     QString m_atlasEnv;
-    QHash<qintptr,CAtlasServer::AtlasDirection> m_direction;
 
     void loadSettings();
     void incomingConnection(int socket);
