@@ -21,7 +21,8 @@ HEADERS  += mainwindow.h \
     service.h \
     server.h
 
-FORMS    += mainwindow.ui
+FORMS    += mainwindow.ui \
+    logindlg.ui
 
 include(qtservice/src/qtservice.pri)
 

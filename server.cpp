@@ -105,7 +105,7 @@ void CServer::loadSettings()
     m_serverCert.clear();
     m_privateKey.clear();
 
-    QSettings settings(QSettings::SystemScope,"kernel1024","atlastcpsvc-ng");
+    QSettings settings("kernel1024","atlastcpsvc-ng");
     settings.beginGroup("Server");
 
     m_port = settings.value("port",18000).toInt();
@@ -234,7 +234,7 @@ void CServer::closeSocket()
 bool CServer::saveSettings()
 {
     qInfo() << "Saving settings...";
-    QSettings settings(QSettings::SystemScope,"kernel1024","atlastcpsvc-ng");
+    QSettings settings("kernel1024","atlastcpsvc-ng");
     if (!settings.isWritable() || settings.status()!=QSettings::NoError)
         return false;
     settings.beginGroup("Server");

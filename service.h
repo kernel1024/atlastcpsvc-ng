@@ -15,7 +15,8 @@ public:
 
     CService(int argc, char **argv);
     static bool testProcessToken(ProcessToken checkToken);
-    static bool restartAsAdmin(int argc, char *argv[]);
+    static int runAs(const QString& app, const QString& arguments,
+                     bool waitToFinish = false);
     static QString getCurrentUserName();
 protected:
     void start();

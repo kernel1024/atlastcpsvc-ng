@@ -7,6 +7,7 @@
 #include "atlas.h"
 #include "service.h"
 #include "ui_mainwindow.h"
+#include "ui_logindlg.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -79,6 +80,8 @@ void MainWindow::initializeUiParams()
     if (env.contains(daemon->atlasEnv()))
         ui->listEnvironment->setCurrentIndex(env.indexOf(daemon->atlasEnv()));
     ui->listTokens->addItems(daemon->clientTokens());
+
+    ui->lblUserName->setText(CService::getCurrentUserName());
 
     showSSLParams();
 }
@@ -221,24 +224,39 @@ void MainWindow::saveSettings()
 
 void MainWindow::installSerivce()
 {
-    QString user = CService::getCurrentUserName();
-    bool ok;
-    QString pass = QInputDialog::getText(this,tr("AtlasTCPSvc-NG service installation"),
-                                         tr("Your password for account '%1' "
-                                            "(will be used for service setup)").arg(user),
-                                         QLineEdit::Password,QString(),&ok);
-    if (!ok) return;
-    if (m_svctl!=NULL && !m_svctl->isInstalled())
-        if (!m_svctl->install(qApp->applicationFilePath(),user,pass))
-            QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
-                                  tr("Unable to install service."));
-    updateServiceController();
+    QDialog *dlg = new QDialog(this);
+    Ui::loginDialog ldui;
+    ldui.setupUi(dlg);
+
+    ldui.editUser->setText(CService::getCurrentUserName());
+    ldui.labelMsg->setText(tr("Login credentials for ATLAS TCP service.\n"
+                              "Service and ATLAS itself will save settings within selected user profile.\n"
+                              "You can leave both field empty to use default LocalSystem account."));
+    dlg->setWindowTitle(tr("AtlasTCPSvc-NG service login"));
+
+    if (dlg->exec()==QDialog::Accepted) {
+        if (m_svctl!=NULL && !m_svctl->isInstalled()) {
+            QString params = QString("-i");
+            if (!ldui.editUser->text().isEmpty()) {
+                params.append(QString(" %1").arg(ldui.editUser->text()));
+                if (!ldui.editPassword->text().isEmpty())
+                    params.append(QString(" %1").arg(ldui.editPassword->text()));
+            }
+            if (CService::runAs(QString(),params,true)!=0)
+                QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
+                                      tr("Unable to install service."));
+        }
+        updateServiceController();
+    }
+
+    dlg->setParent(NULL);
+    delete dlg;
 }
 
 void MainWindow::uninstallSerivce()
 {
     if (m_svctl!=NULL && m_svctl->isInstalled())
-        if (!m_svctl->uninstall())
+        if (CService::runAs(QString(),"-u",true)!=0)
             QMessageBox::critical(this,tr("AtlasTCPSvc-NG"),
                                   tr("Unable to uninstall service."));
     updateServiceController();

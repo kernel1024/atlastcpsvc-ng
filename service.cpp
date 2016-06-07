@@ -3,22 +3,16 @@
 #include <lmcons.h>
 #include "service.h"
 
-bool CService::restartAsAdmin(int argc, char *argv[])
+int CService::runAs(const QString& app, const QString& arguments, bool waitToFinish)
 {
-    if (argc<1) return false;
-    QStringList args;
-    for (int i=0;i<argc;i++)
-        args.append(QString::fromLocal8Bit(argv[i]));
-    QString appFullPath = args.at(0);
-    if (args.contains("elevated")) {
-        qCritical() << "Recursive start detected. Aborting.";
-        return false;
-    }
+    QString appFullPath = app;
+    if (appFullPath.isEmpty())
+        appFullPath = QCoreApplication::applicationFilePath();
 
     QFileInfo fi(appFullPath);
     if (!fi.exists()) {
-        qCritical() << "Self exe not found. Incorrect argv[0] parameter.";
-        return false;
+        qCritical() << "Executable module not found. Incorrect parameters.";
+        return -1;
     }
     // Setup the required structure
     SHELLEXECUTEINFO ShExecInfo;
@@ -26,17 +20,23 @@ bool CService::restartAsAdmin(int argc, char *argv[])
     ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
     ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
     ShExecInfo.lpVerb = L"runas";
-    ShExecInfo.lpFile = NULL;
     if (appFullPath.length() > 0)
         ShExecInfo.lpFile = reinterpret_cast<const WCHAR *>(appFullPath.utf16());
-    ShExecInfo.lpParameters = L"elevated";
+    if (arguments.length() > 0)
+        ShExecInfo.lpParameters = reinterpret_cast<const WCHAR *>(arguments.utf16());
     ShExecInfo.nShow = SW_SHOW;
 
     // Spawn the process
     if (ShellExecuteEx(&ShExecInfo) == FALSE)
-        return false; // Failed to execute process
+        return -2; // Failed to execute process
+    else if (waitToFinish) {
+        WaitForSingleObject(ShExecInfo.hProcess,INFINITE);
+        DWORD ec = 0;
+        GetExitCodeProcess(ShExecInfo.hProcess,&ec);
+        return ec;
+    }
 
-    return true;
+    return 0;
 }
 
 QString CService::getCurrentUserName()
