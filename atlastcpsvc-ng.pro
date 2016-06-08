@@ -32,3 +32,6 @@ RC_FILE = atlastcpsvc-ng.rc
 
 DISTFILES += \
     atlastcpsvc-ng.rc
+
+RESOURCES += \
+    atlastcpsvc-ng.qrc

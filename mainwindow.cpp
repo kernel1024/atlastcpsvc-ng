@@ -15,6 +15,7 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     m_svctl = NULL;
+    setWindowIcon(QIcon(":/icons/trans.png"));
 
     connect(ui->btnAddToken,&QPushButton::clicked,this,&MainWindow::addToken);
     connect(ui->btnDeleteToken,&QPushButton::clicked,this,&MainWindow::delToken);
