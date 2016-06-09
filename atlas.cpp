@@ -25,6 +25,7 @@ QByteArray toSJIS(const QString &str)
         qFatal("SJIS not supported");
     QTextEncoder *encoderWithoutBom = codec->makeEncoder( QTextCodec::IgnoreHeader );
     QByteArray ba  = encoderWithoutBom ->fromUnicode( str );
+    delete encoderWithoutBom;
     ba.append('\0'); ba.append('\0');
     return ba;
 }
@@ -36,6 +37,7 @@ QString fromSJIS(const QByteArray &str)
         qFatal("SJIS not supported");
     QTextDecoder *decoderWithoutBom = codec->makeDecoder( QTextCodec::IgnoreHeader );
     QString s  = decoderWithoutBom->toUnicode( str );
+    delete decoderWithoutBom;
     return s;
 }
 
