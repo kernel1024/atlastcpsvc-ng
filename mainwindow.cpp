@@ -99,6 +99,7 @@ void MainWindow::showSSLParams()
             case QSsl::Rsa: ui->lblKey->setText(tr("RSA, %1 bits").arg(bits)); break;
             case QSsl::Dsa: ui->lblKey->setText(tr("DSA, %1 bits").arg(bits)); break;
             case QSsl::Ec: ui->lblKey->setText(tr("EC-key, %1 bits").arg(bits)); break;
+            case QSsl::Dh: ui->lblKey->setText(tr("DH, %1 bits").arg(bits)); break;
         }
     }
 

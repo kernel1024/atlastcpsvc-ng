@@ -19,9 +19,12 @@ SOURCES += main.cpp\
 
 HEADERS  += mainwindow.h \
     atlas.h \
+    qsl.h \
     service.h \
     server.h \
     atlassocket.h
+
+LIBS += -ladvapi32
 
 FORMS    += mainwindow.ui \
     logindlg.ui
