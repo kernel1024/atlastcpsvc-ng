@@ -5,34 +5,38 @@
 #include "server.h"
 #include "service.h"
 #include "atlassocket.h"
+#include "qsl.h"
 #include <QDebug>
 
-CServer::CServer(bool interactive, QObject *parent)
+CServer::CServer(QObject *parent)
     : QTcpServer(parent)
 {
-    m_port = 18000;
-    m_disabled = false;
-    m_interactive = interactive;
-
     loadSettings();
-
-    connect(this, &CServer::newConnection, this, &CServer::acceptConnection);
-
-    qInfo() << "Initializing ATLAS...";
-    if (!atlasServer.isLoaded())
-        if (!atlasServer.init(CAtlasServer::Atlas_JE, m_atlasEnv))
-            return;
-
-    qInfo() << "Checking for valid SSL keys...";
-    if (m_privateKey.isNull() || m_serverCert.isNull()) return;
-
-    qInfo() << "Start listening.";
-    listen(QHostAddress::AnyIPv4, m_port);
+    connect(this, &QTcpServer::newConnection, this, &CServer::acceptConnections);
 }
 
 CServer::~CServer()
 {
     closeSocket();
+}
+
+void CServer::start()
+{
+    if (isListening()) return;
+
+    if (!atlasServer.isLoaded()) {
+        if (!atlasServer.init(CAtlasServer::Atlas_JE, m_atlasEnv)) {
+            qCritical() << "Unable to load ATLAS engine";
+            return;
+        }
+    }
+
+    if (m_privateKey.isNull() || m_serverCert.isNull()) {
+        qWarning() << "Credentials is empty, unable to open socket";
+        return;
+    }
+
+    listen(m_atlasHost, m_atlasPort);
 }
 
 void CServer::pause()
@@ -43,6 +47,16 @@ void CServer::pause()
 void CServer::resume()
 {
     m_disabled = false;
+}
+
+QHostAddress CServer::atlasHost() const
+{
+    return m_atlasHost;
+}
+
+void CServer::setAtlasHost(const QHostAddress &host)
+{
+    m_atlasHost = host;
 }
 
 void CServer::setAtlasEnv(const QString &atlasEnv)
@@ -73,7 +87,7 @@ void CServer::setPrivateKey(const QSslKey &privateKey)
 
 void CServer::setAtlasPort(int port)
 {
-    m_port = port;
+    m_atlasPort = port;
 }
 
 QString CServer::atlasEnv() const
@@ -98,52 +112,52 @@ QSslKey CServer::privateKey() const
 
 int CServer::atlasPort() const
 {
-    return m_port;
+    return m_atlasPort;
 }
 
 void CServer::loadSettings()
 {
-    qInfo() << "Loading settings...";
     m_serverCert.clear();
     m_privateKey.clear();
 
-    QSettings settings("kernel1024","atlastcpsvc-ng");
-    settings.beginGroup("Server");
+    QSettings settings;
+    settings.beginGroup(QSL("Server"));
 
-    m_port = settings.value("port",18000).toInt();
-    m_atlasEnv = settings.value("atlasEnvironment",QString("General")).toString();
+    m_atlasPort = settings.value(QSL("port"),CDefaults::atlPort).toInt();
+    m_atlasHost = QHostAddress(settings.value(QSL("host"),CDefaults::atlHost).toUInt());
+    m_atlasEnv = settings.value(QSL("atlasEnvironment"),QSL("General")).toString();
 
-    QByteArray ba;
-    ba = settings.value("privateKey",QByteArray()).toByteArray();
-    if (!ba.isEmpty())
-        m_privateKey = QSslKey(ba,QSsl::Rsa,QSsl::Pem,QSsl::PrivateKey);
-    ba = settings.value("serverCert",QByteArray()).toByteArray();
-    if (!ba.isEmpty())
-        m_serverCert = QSslCertificate(ba,QSsl::Pem);
+    QByteArray buf;
+    buf = settings.value(QSL("privateKey"),QByteArray()).toByteArray();
+    if (!buf.isEmpty())
+        m_privateKey = QSslKey(buf,QSsl::Rsa,QSsl::Pem,QSsl::PrivateKey);
+    buf = settings.value(QSL("serverCert"),QByteArray()).toByteArray();
+    if (!buf.isEmpty())
+        m_serverCert = QSslCertificate(buf,QSsl::Pem);
 
-    m_clientTokens = settings.value("clientTokens",QStringList()).value<QStringList>();
+    m_clientTokens = settings.value(QSL("clientTokens"),QStringList()).toStringList();
 
     settings.endGroup();
 }
 
-void CServer::incomingConnection(int socket)
+void CServer::incomingConnection(qintptr socket)
 {
     if (m_disabled)
         return;
 
-    CAtlasSocket* s = new CAtlasSocket(this);
+    auto* s = new CAtlasSocket(this);
     if (s->setSocketDescriptor(socket))
         addPendingConnection(s);
 }
 
-void CServer::acceptConnection()
+void CServer::acceptConnections()
 {
     while (hasPendingConnections()) {
         QTcpSocket* ts = nextPendingConnection();
-        CAtlasSocket* s = qobject_cast<CAtlasSocket *>(ts);
+        auto* s = qobject_cast<CAtlasSocket *>(ts);
         // Accept only our sockets, close others.
-        if (s==NULL) {
-            if (ts!=NULL) {
+        if (s == nullptr) {
+            if (ts) {
                 ts->close();
                 ts->deleteLater();
             }
@@ -161,22 +175,25 @@ void CServer::acceptConnection()
 
 void CServer::readClient()
 {
-
     if (m_disabled)
         return;
 
-    CAtlasSocket* socket = qobject_cast<CAtlasSocket *>(sender());
-    if (socket==NULL) return;
+    static const QString cmdInit(QSL("INIT:"));
+    static const QString cmdDir(QSL("DIR:"));
+    static const QString cmdTr(QSL("TR:"));
+    static const QString cmdFin(QSL("FIN:"));
+
+    auto* socket = qobject_cast<CAtlasSocket *>(sender());
+    if (socket == nullptr) return;
     if (!socket->isEncrypted()) return;
 
     bool needCloseSocket = false;
     bool handled = false;
     if (socket->canReadLine()) {
-        QString cmd = socket->readLine().simplified();
-        if (cmd.startsWith("INIT:"))
-        {
+        QString cmd = QString::fromLatin1(socket->readLine().simplified());
+        if (cmd.startsWith(cmdInit)) {
             QString token = cmd;
-            token.replace("INIT:", "");
+            token.remove(0,cmdInit.length());
             if (m_clientTokens.contains(token)) {
                 socket->setAuthenticated(true);
                 socket->setDirection(CAtlasServer::Atlas_JE);
@@ -186,37 +203,38 @@ void CServer::readClient()
                 needCloseSocket = true;
             }
             handled = true;
+
         } else if (socket->authenticated()) {
-            if (cmd.startsWith("DIR:"))
-            {
+            if (cmd.startsWith(cmdDir)) {
                 QString dir = cmd.toUpper();
-                dir.replace("DIR:", "");
-                if (dir.startsWith("JE"))
+                dir.remove(0,cmdDir.length());
+                if (dir.startsWith(QSL("JE"))) {
                     socket->setDirection(CAtlasServer::Atlas_JE);
-                else if (dir.startsWith("EJ"))
+                } else if (dir.startsWith(QSL("EJ"))) {
                     socket->setDirection(CAtlasServer::Atlas_EJ);
-                else
+                } else {
                     socket->setDirection(CAtlasServer::Atlas_Auto);
+                }
                 socket->write("OK\r\n");
                 handled = true;
-            } else if (cmd.startsWith("FIN"))
-            {
+
+            } else if (cmd.startsWith(cmdFin)) {
                 socket->write("OK\r\n");
                 needCloseSocket = true;
                 handled = true;
-            } else if (cmd.startsWith("TR:"))
-            {
+
+            } else if (cmd.startsWith(cmdTr)) {
                 QString s = cmd;
-                s.replace("TR:", "");
+                s.remove(0,cmdTr.length());
                 s = QUrl::fromPercentEncoding(s.toLatin1()).trimmed();
-                if (s.isEmpty())
+                if (s.isEmpty()) {
                     socket->write("ERR:NULL_STR_DECODED\r\n");
-                else {
+                } else {
                     s = atlasServer.translate(socket->direction(),s);
-                    if (s.startsWith("ERR"))
+                    if (s.startsWith(QSL("ERR"))) {
                         socket->write("ERR:TRANS_FAILED\r\n");
-                    else {
-                        s = "RES:" + QString::fromLatin1(QUrl::toPercentEncoding(s)).trimmed() + "\r\n";
+                    } else {
+                        s = QSL("RES:%1\r\n").arg(QString::fromLatin1(QUrl::toPercentEncoding(s)).trimmed());
                         socket->write(s.toLatin1());
                     }
                 }
@@ -239,8 +257,8 @@ void CServer::readClient()
 
 void CServer::discardClient()
 {
-    CAtlasSocket* s = qobject_cast<CAtlasSocket *>(sender());
-    if (s!=NULL)
+    auto* s = qobject_cast<CAtlasSocket *>(sender());
+    if (s)
         s->deleteLater();
 }
 
@@ -252,21 +270,18 @@ void CServer::closeSocket()
 
 bool CServer::saveSettings()
 {
-    qInfo() << "Saving settings...";
-    QSettings settings("kernel1024","atlastcpsvc-ng");
-    if (!settings.isWritable() || settings.status()!=QSettings::NoError)
+    QSettings settings;
+    if (!settings.isWritable() || (settings.status() != QSettings::NoError))
         return false;
-    settings.beginGroup("Server");
 
-    settings.setValue("port",m_port);
-    settings.setValue("atlasEnvironment",m_atlasEnv);
+    settings.beginGroup(QSL("Server"));
 
-    QByteArray ba = m_privateKey.toPem();
-    settings.setValue("privateKey",QVariant::fromValue(ba));
-    ba = m_serverCert.toPem();
-    settings.setValue("serverCert",QVariant::fromValue(ba));
-
-    settings.setValue("clientTokens",QVariant::fromValue(m_clientTokens));
+    settings.setValue(QSL("port"),m_atlasPort);
+    settings.setValue(QSL("host"),m_atlasHost.toIPv4Address());
+    settings.setValue(QSL("atlasEnvironment"),m_atlasEnv);
+    settings.setValue(QSL("privateKey"),QVariant::fromValue(m_privateKey.toPem()));
+    settings.setValue(QSL("serverCert"),QVariant::fromValue(m_serverCert.toPem()));
+    settings.setValue(QSL("clientTokens"),QVariant::fromValue(m_clientTokens));
 
     settings.endGroup();
 

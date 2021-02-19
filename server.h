@@ -6,50 +6,62 @@
 #include <QSslCertificate>
 #include "atlas.h"
 
+namespace CDefaults {
+const int atlPort = 18000;
+const QHostAddress::SpecialAddress atlHost = QHostAddress::AnyIPv4;
+}
+
 class CServer : public QTcpServer
 {
+    Q_OBJECT
 public:
-    CServer(bool interactive, QObject *parent = 0);
-    ~CServer();
+    explicit CServer(QObject *parent = nullptr);
+    ~CServer() override;
 
+    void start();
     void pause();
-
     void resume();
 
 private:
-    int m_port;
-    bool m_disabled;
+    Q_DISABLE_COPY(CServer)
+
+    int m_atlasPort { CDefaults::atlPort };
+    bool m_disabled { false };
+    QHostAddress m_atlasHost { CDefaults::atlHost };
     QSslKey m_privateKey;
     QSslCertificate m_serverCert;
-    bool m_interactive;
     QStringList m_clientTokens;
     QString m_atlasEnv;
 
     void loadSettings();
-    void incomingConnection(int socket);
 
 public:
     int atlasPort() const;
+    QHostAddress atlasHost() const;
     QSslKey privateKey() const;
     QSslCertificate serverCert() const;
     QStringList clientTokens() const;
     QString atlasEnv() const;
 
     void setAtlasPort(int port);
+    void setAtlasHost(const QHostAddress &host);
     void setPrivateKey(const QSslKey &privateKey);
     void setServerCert(const QSslCertificate &serverCert);
     void setAtlasEnv(const QString &atlasEnv);
     void deleteToken(const QString &token);
     void addToken(const QString &token);
 
-public slots:
-    bool saveSettings();
-    void closeSocket();
+protected:
+    void incomingConnection(qintptr socket) override;
 
-private slots:
+private Q_SLOTS:
     void readClient();
     void discardClient();
-    void acceptConnection();
+    void acceptConnections();
+
+public Q_SLOTS:
+    bool saveSettings();
+    void closeSocket();
 
 };
 

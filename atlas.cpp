@@ -12,74 +12,28 @@
 #include <QDir>
 #include <QTextStream>
 #include <QMutex>
+#include <QSettings>
 #include <QDebug>
-#include <windows.h>
 #include <array>
 #include <algorithm>
 
 #include "atlas.h"
 #include "qsl.h"
 
+// TODO: move from globals to singleton
+
 CAtlasServer atlasServer;
 QMutex atlasMutex;
-
-std::wstring GetStringValueFromHKLM(HKEY hKey, const std::wstring& regSubKey, const std::wstring& regValue)
-{
-    size_t bufferSize = 0xFFF; // If too small, will be resized down below.
-    std::wstring valueBuf; // Contiguous buffer since C++11.
-    valueBuf.resize(bufferSize);
-    auto cbData = static_cast<DWORD>(bufferSize * sizeof(wchar_t));
-    auto rc = RegGetValueW(
-        hKey,
-        regSubKey.c_str(),
-        regValue.c_str(),
-        RRF_RT_REG_SZ,
-        nullptr,
-        static_cast<void*>(valueBuf.data()),
-        &cbData
-    );
-    while (rc == ERROR_MORE_DATA)
-    {
-        // Get a buffer that is big enough.
-        cbData /= sizeof(wchar_t);
-        if (cbData > static_cast<DWORD>(bufferSize))
-        {
-            bufferSize = static_cast<size_t>(cbData);
-        }
-        else
-        {
-            bufferSize *= 2;
-            cbData = static_cast<DWORD>(bufferSize * sizeof(wchar_t));
-        }
-        valueBuf.resize(bufferSize);
-        rc = RegGetValueW(
-            HKEY_LOCAL_MACHINE,
-            regSubKey.c_str(),
-            regValue.c_str(),
-            RRF_RT_REG_SZ,
-            nullptr,
-            static_cast<void*>(valueBuf.data()),
-            &cbData
-        );
-    }
-    if (rc == ERROR_SUCCESS)
-    {
-        cbData /= sizeof(wchar_t);
-        valueBuf.resize(static_cast<size_t>(cbData - 1)); // remove end null character
-        return valueBuf;
-    }
-    else
-    {
-        throw std::runtime_error("Windows system error code: " + std::to_string(rc));
-    }
-}
+QMutex atlasInitMutex;
 
 QByteArray toSJIS(const QString &str)
 {
     QByteArray res("ERROR");
     QTextCodec *codec = QTextCodec::codecForName("SJIS");
-    if (!codec)
+    if (!codec) {
+        qCritical() << "SJIS codec not supported.";
         return res;
+    }
     QTextEncoder *encoderWithoutBom = codec->makeEncoder( QTextCodec::IgnoreHeader );
     res  = encoderWithoutBom ->fromUnicode( str );
     delete encoderWithoutBom;
@@ -91,8 +45,10 @@ QString fromSJIS(const QByteArray &str)
 {
     QString res(QSL("ERROR"));
     QTextCodec *codec = QTextCodec::codecForName("SJIS");
-    if (!codec)
+    if (!codec) {
+        qCritical() << "SJIS codec not supported.";
         return res;
+    }
     QTextDecoder *decoderWithoutBom = codec->makeDecoder( QTextCodec::IgnoreHeader );
     res  = decoderWithoutBom->toUnicode( str );
     delete decoderWithoutBom;
@@ -149,22 +105,32 @@ int CAtlasServer::getTransDirection() const
 
 void CAtlasServer::uninit()
 {
+    atlasInitMutex.lock();
+
     m_atlasTransDirection = Atlas_JE;
     m_internalDirection = Atlas_JE;
     m_atlasVersion = 0;
     if (isLoaded())
 		DestroyEngine();
 
-    if (h_atlecont.isLoaded())
-        h_atlecont.unload();
+    if (h_atlecont) {
+        FreeLibrary(h_atlecont);
+        h_atlecont = nullptr;
+    }
 
-    if (h_awdict.isLoaded())
-        h_awdict.unload();
+    if (h_awdict) {
+        FreeLibrary(h_awdict);
+        h_awdict = nullptr;
+    }
 
-    if (h_awuenv.isLoaded())
-        h_awuenv.unload();
+    if (h_awuenv) {
+        FreeLibrary(h_awuenv);
+        h_awuenv = nullptr;
+    }
 
     m_atlasHappy = false;
+
+    atlasInitMutex.unlock();
 }
 
 bool CAtlasServer::haveJapanese(const QString &str)
@@ -187,7 +153,9 @@ bool CAtlasServer::haveJapanese(const QString &str)
 
 QString CAtlasServer::translate(AtlasDirection transDirection, const QString &str)
 {
-    if (!isLoaded()) return QSL("ERR");
+    QString res = QSL("ERR");
+
+    if (!isLoaded()) return res;
 
     QMutexLocker locker(&atlasMutex);
 
@@ -213,30 +181,34 @@ QString CAtlasServer::translate(AtlasDirection transDirection, const QString &st
         }
     }
 
-    if (od!=m_internalDirection) {
-        qDebug() << "Change direction to " << m_internalDirection;
-        if (!init(m_internalDirection, m_environment, true))
-            return QSL("ERR");
+    if (od != m_internalDirection) {
+        if (!init(m_internalDirection, m_environment, true)) {
+            qCritical() << "Unable to reinitialize ATLAS on translation direction change.";
+            return res;
+        }
     }
 
-    char *outjis = nullptr;
+    char *outjis = nullptr; // NOLINT
     void *unsure = nullptr;
     unsigned int maybeSize = 0U;
     QByteArray injis = toSJIS(str);
     auto *temp = injis.data();
 
-    // I completely ignore return value.  Not sure if it matters.
-    TranslatePair(temp, &outjis, &unsure, &maybeSize);
+    try {
+        // I completely ignore return value.  Not sure if it matters.
+        TranslatePair(temp, &outjis, &unsure, &maybeSize);
 
-	if (unsure)
-		FreeAtlasData(unsure,nullptr,nullptr,nullptr);
+        res = fromSJIS(QByteArray::fromRawData(outjis,strlen(outjis)));
+        FreeAtlasData(outjis,nullptr,nullptr,nullptr);
 
-    if (outjis) {
-        QString res = fromSJIS(QByteArray::fromRawData(outjis,strlen(outjis)));
-		FreeAtlasData(outjis,nullptr,nullptr,nullptr);
-        return res;
-	}
-    return QSL("ERR");
+        if (unsure)
+            FreeAtlasData(unsure,nullptr,nullptr,nullptr);
+    } catch (const std::exception& ex) {
+        qCritical() << "Translate exception handled: " << ex.what();
+        res = QSL("ERR");
+    }
+
+    return res;
 }
 
 QStringList CAtlasServer::getEnvironments()
@@ -262,39 +234,27 @@ QStringList CAtlasServer::getEnvironments()
 
 bool CAtlasServer::loadDLLs()
 {
-    if (h_atlecont.isLoaded() && h_awdict.isLoaded() && h_awuenv.isLoaded())
+    if (isDLLsLoaded())
         return true;
 
     constexpr int atlasVersionLow = 13;
     constexpr int atlasVersionHigh = 14;
 
     for (int v = atlasVersionHigh; v>=atlasVersionLow; v--) {
-        std::wstring buf = QSL("Software\\Fujitsu\\ATLAS\\V%1.0\\EJ").arg(v).toStdWString();
-        HKEY hKey = nullptr;
-        if (ERROR_SUCCESS != RegOpenKeyW(HKEY_CURRENT_USER, buf.data(), &hKey))
-            continue;
+        QSettings registry(QSL("HKEY_CURRENT_USER\\Software\\Fujitsu\\ATLAS\\V%1.0\\EJ").arg(v),QSettings::NativeFormat);
+        const QString newPath = registry.value(QSL("TRENV EJ")).toString();
+        if (newPath.isEmpty()) continue;
+        const QDir atlasDir = QFileInfo(newPath).dir();
+        if (!atlasDir.isAbsolute() || !atlasDir.isReadable()) continue;
+        std::wstring w_atlecont = QDir::toNativeSeparators(atlasDir.filePath(QSL("AtleCont.dll"))).toStdWString();
+        std::wstring w_awdict = QDir::toNativeSeparators(atlasDir.filePath(QSL("awdict.dll"))).toStdWString();
+        std::wstring w_awuenv = QDir::toNativeSeparators(atlasDir.filePath(QSL("awuenv.dll"))).toStdWString();
 
-        buf.assign(MAX_PATH*2, 0);
-        DWORD type = REG_NONE;
-        DWORD size = (buf.length()-1) * sizeof(wchar_t);
-        RegGetValueW(hKey,()
-        int res = RegQueryValueExW(hKey, L"TRENV EJ", nullptr, &type, reinterpret_cast<BYTE*>(buf.data()), &size);
-        RegCloseKey(hKey);
+        h_atlecont = LoadLibraryExW(w_atlecont.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        h_awdict = LoadLibraryExW(w_awdict.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        h_awuenv = LoadLibraryExW(w_awuenv.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 
-        if (ERROR_SUCCESS != res || type != REG_SZ)
-            continue;
-
-        QString newPath = QString::fromWCharArray(buf);
-        if (!newPath.contains('\\'))
-            continue;
-        h_atlecont.setFileName(QSL("%1\\AtleCont.dll"));
-        h_atlecont.load();
-        h_awdict.setFileName(QSL("%1\\awdict.dll"));
-        h_awdict.load();
-        h_awuenv.setFileName(QSL("%1\\awuenv.dll"));
-        h_awuenv.load();
-        if (h_atlecont.isLoaded() && h_awdict.isLoaded() && h_awuenv.isLoaded())
-        {
+        if (isDLLsLoaded()) {
             atlasPath = newPath;
             m_atlasVersion = v;
             return true;
@@ -309,6 +269,13 @@ bool CAtlasServer::isLoaded() const
     return m_atlasHappy;
 }
 
+bool CAtlasServer::isDLLsLoaded() const
+{
+    return (h_atlecont != nullptr) &&
+            (h_awdict != nullptr) &&
+            (h_awuenv != nullptr);
+}
+
 bool CAtlasServer::init(AtlasDirection transDirection, const QString& environment, bool forceDirectionChange)
 {
     AtlasDirection md = m_atlasTransDirection;
@@ -318,31 +285,41 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
 
     if (!loadDLLs()) return false;
 
-    if (h_atlecont.isLoaded() &&
-            (CreateEngine = reinterpret_cast<CreateEngineType *>(h_atlecont.resolve("CreateEngine"))) &&
-            (DestroyEngine = reinterpret_cast<DestroyEngineType *>(h_atlecont.resolve("DestroyEngine"))) &&
-            (TranslatePair = reinterpret_cast<TranslatePairType *>(h_atlecont.resolve("TranslatePair"))) &&
-            (FreeAtlasData = reinterpret_cast<FreeAtlasDataType *>(h_atlecont.resolve("FreeAtlasData"))) &&
-            (AtlInitEngineData = reinterpret_cast<AtlInitEngineDataType *>(h_atlecont.resolve("AtlInitEngineData")))
+    atlasInitMutex.lock();
+
+    if (isDLLsLoaded() &&
+            (CreateEngine = reinterpret_cast<CreateEngineType *>(GetProcAddress(h_atlecont,"CreateEngine"))) &&
+            (DestroyEngine = reinterpret_cast<DestroyEngineType *>(GetProcAddress(h_atlecont,"DestroyEngine"))) &&
+            (TranslatePair = reinterpret_cast<TranslatePairType *>(GetProcAddress(h_atlecont,"TranslatePair"))) &&
+            (FreeAtlasData = reinterpret_cast<FreeAtlasDataType *>(GetProcAddress(h_atlecont,"FreeAtlasData"))) &&
+            (AtlInitEngineData = reinterpret_cast<AtlInitEngineDataType *>(GetProcAddress(h_atlecont,"AtlInitEngineData")))
             )
     {
         m_environment = environment;
-        const int dunnoSize = 1000;
-        static std::array<int,dunnoSize> dunno1 = {0};
-        static std::array<int,dunnoSize> dunno2 = {0};
-        if (0 == AtlInitEngineData(0, 2, dunno1.data(), 0, dunno2.data()) &&
-                1 == CreateEngine(1, static_cast<int>(transDirection), 0, toSJIS(m_environment).data()))
-        {
-            if (forceDirectionChange) {
-                m_atlasTransDirection = md;
-            } else {
-                m_atlasTransDirection = transDirection;
+        try {
+            const int dunnoSize = 1000;
+            static std::array<int,dunnoSize> dunno1 = {0};
+            static std::array<int,dunnoSize> dunno2 = {0};
+            QByteArray env = toSJIS(m_environment);
+
+            if (0 == AtlInitEngineData(0, 2, dunno1.data(), 0, dunno2.data()) &&
+                    1 == CreateEngine(1, static_cast<int>(transDirection), 0, env.data()))
+            {
+                if (forceDirectionChange) {
+                    m_atlasTransDirection = md;
+                } else {
+                    m_atlasTransDirection = transDirection;
+                }
+                m_internalDirection = transDirection;
+                m_atlasHappy = true;
+                atlasInitMutex.unlock();
+                return true;
             }
-            m_internalDirection = transDirection;
-            m_atlasHappy = true;
-            return true;
+        } catch (const std::exception& ex) {
+            qCritical() << "ATLAS initialization exception handled: " << ex.what();
         }
     }
+    atlasInitMutex.unlock();
     uninit();
     return false;
 }

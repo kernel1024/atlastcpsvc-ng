@@ -1,7 +1,10 @@
 #include <QFileInfo>
 #include <windows.h>
 #include <lmcons.h>
+#include <array>
+#include <string>
 #include "service.h"
+#include "qsl.h"
 
 int CService::runAs(const QString& app, const QString& arguments, bool waitToFinish)
 {
@@ -29,7 +32,8 @@ int CService::runAs(const QString& app, const QString& arguments, bool waitToFin
     // Spawn the process
     if (ShellExecuteEx(&ShExecInfo) == FALSE)
         return -2; // Failed to execute process
-    else if (waitToFinish) {
+
+    if (waitToFinish) {
         WaitForSingleObject(ShExecInfo.hProcess,INFINITE);
         DWORD ec = 0;
         GetExitCodeProcess(ShExecInfo.hProcess,&ec);
@@ -41,10 +45,11 @@ int CService::runAs(const QString& app, const QString& arguments, bool waitToFin
 
 QString CService::getCurrentUserName()
 {
-    wchar_t acUserName[UNLEN+1];
-    DWORD nUserName = sizeof(acUserName);
-    if (GetUserName(acUserName, &nUserName))
-        return QString::fromWCharArray(acUserName);
+    std::wstring acUserName;
+    acUserName.resize(UNLEN + 1);
+    DWORD nUserName = acUserName.length();
+    if (GetUserNameW(acUserName.data(), &nUserName))
+        return QString::fromWCharArray(acUserName.data());
     return QString();
 }
 
@@ -138,22 +143,25 @@ ret:
 }
 
 CService::CService(int argc, char **argv)
-    : QtService<QCoreApplication>(argc, argv, "ATLAS TCP NG Service")
+    : QtService<QCoreApplication>(argc, argv, QSL("ATLAS TCP NG Service"))
 {
-    setServiceDescription("ATLAS translation engine TCP service with SSL support, implemented with Qt.");
+    setServiceDescription(QSL("ATLAS translation engine TCP service with SSL support, implemented with Qt."));
     setServiceFlags(QtServiceBase::CanBeSuspended);
     setStartupType(QtServiceController::AutoStartup);
 }
+
+CService::~CService() = default;
 
 void CService::start()
 {
     QCoreApplication *app = application();
 
-    daemon = new CServer(false, app);
+    daemon.reset(new CServer(app));
+    daemon->start();
 
     if (!daemon->isListening()) {
-        logMessage(QString("Failed to start ATLAS service"), QtServiceBase::Error);
-        app->quit();
+        qCritical() << "Failed to start ATLAS service";
+        QCoreApplication::quit();
     }
 }
 

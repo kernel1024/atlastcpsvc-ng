@@ -30,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->btnSvcInstall,&QPushButton::clicked,this,&MainWindow::installSerivce);
     connect(ui->btnSvcUninstall,&QPushButton::clicked,this,&MainWindow::uninstallSerivce);
 
-    daemon = new CServer(true, this);
+    daemon = new CServer(this,true);
     connect(qApp,&QApplication::aboutToQuit,[this](){
         daemon->closeSocket();
         QApplication::processEvents();

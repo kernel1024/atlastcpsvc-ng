@@ -8,17 +8,17 @@ class CAtlasSocket : public QSslSocket
 {
     Q_OBJECT
 public:
-    explicit CAtlasSocket(QObject *parent = Q_NULLPTR);
+    explicit CAtlasSocket(QObject *parent = nullptr);
 
     bool authenticated() const;
     void setAuthenticated(bool authenticated);
 
     CAtlasServer::AtlasDirection direction() const;
-    void setDirection(const CAtlasServer::AtlasDirection &direction);
+    void setDirection(CAtlasServer::AtlasDirection direction);
 
 private:
-    bool m_authenticated;
-    CAtlasServer::AtlasDirection m_direction;
+    bool m_authenticated { false };
+    CAtlasServer::AtlasDirection m_direction { CAtlasServer::Atlas_JE };
 
 };
 

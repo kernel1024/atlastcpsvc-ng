@@ -11,7 +11,7 @@
 #define ATLAS_H
 
 #include <QObject>
-#include <QLibrary>
+#include <windows.h>
 
 class CAtlasServer : public QObject
 {
@@ -35,6 +35,7 @@ public:
     bool loadDLLs();
 
     bool isLoaded() const;
+    bool isDLLsLoaded() const;
     int getVersion() const;
 
     QString translate(AtlasDirection transDirection, const QString &str);
@@ -49,9 +50,9 @@ private:
     AtlasDirection m_internalDirection { Atlas_JE };
     bool m_atlasHappy { false };
 
-    QLibrary h_atlecont;
-    QLibrary h_awdict;
-    QLibrary h_awuenv;
+    HMODULE h_atlecont { nullptr };
+    HMODULE h_awdict { nullptr };
+    HMODULE h_awuenv { nullptr };
 };
 
 extern CAtlasServer atlasServer;

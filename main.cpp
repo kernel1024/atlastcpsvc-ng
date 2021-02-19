@@ -1,14 +1,17 @@
 #include <QApplication>
-#include <QMessageBox>
-#include <QSysInfo>
 #include "mainwindow.h"
 #include "service.h"
+#include "qsl.h"
 
 int main(int argc, char *argv[])
 {
+    QCoreApplication::setOrganizationName(QSL("kernel1024"));
+    QCoreApplication::setApplicationName(QSL("atlastcpsvc-ng"));
+
     CService service(argc, argv);
     if (CService::testProcessToken(CService::Process_IsInteractive) && argc<=1)
     {
+        QGuiApplication::setApplicationDisplayName(QSL("AtlasTCPsvc-NG"));
         QApplication a(argc, argv);
         MainWindow w;
 
@@ -17,6 +20,7 @@ int main(int argc, char *argv[])
 
         w.show();
         return a.exec();
-    } else
-        return service.exec();
+    }
+
+    return service.exec();
 }

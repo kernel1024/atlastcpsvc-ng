@@ -30,7 +30,10 @@ CONFIG += warn_on \
     stl \
     c++17
 
-LIBS += -ladvapi32
+win32-msvc* {
+    LIBS += -ladvapi32
+    message("Using MSVC specific options")
+}
 
 FORMS    += mainwindow.ui \
     logindlg.ui

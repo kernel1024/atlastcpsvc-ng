@@ -3,8 +3,6 @@
 CAtlasSocket::CAtlasSocket(QObject *parent)
     : QSslSocket(parent)
 {
-    m_authenticated = false;
-    m_direction = CAtlasServer::Atlas_JE;
 }
 
 bool CAtlasSocket::authenticated() const
@@ -22,7 +20,7 @@ CAtlasServer::AtlasDirection CAtlasSocket::direction() const
     return m_direction;
 }
 
-void CAtlasSocket::setDirection(const CAtlasServer::AtlasDirection &direction)
+void CAtlasSocket::setDirection(CAtlasServer::AtlasDirection direction)
 {
     m_direction = direction;
 }
