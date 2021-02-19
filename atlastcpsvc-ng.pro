@@ -24,6 +24,12 @@ HEADERS  += mainwindow.h \
     server.h \
     atlassocket.h
 
+CONFIG += warn_on \
+    exceptions \
+    rtti \
+    stl \
+    c++17
+
 LIBS += -ladvapi32
 
 FORMS    += mainwindow.ui \

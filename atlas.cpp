@@ -15,12 +15,64 @@
 #include <QDebug>
 #include <windows.h>
 #include <array>
+#include <algorithm>
 
 #include "atlas.h"
 #include "qsl.h"
 
 CAtlasServer atlasServer;
 QMutex atlasMutex;
+
+std::wstring GetStringValueFromHKLM(HKEY hKey, const std::wstring& regSubKey, const std::wstring& regValue)
+{
+    size_t bufferSize = 0xFFF; // If too small, will be resized down below.
+    std::wstring valueBuf; // Contiguous buffer since C++11.
+    valueBuf.resize(bufferSize);
+    auto cbData = static_cast<DWORD>(bufferSize * sizeof(wchar_t));
+    auto rc = RegGetValueW(
+        hKey,
+        regSubKey.c_str(),
+        regValue.c_str(),
+        RRF_RT_REG_SZ,
+        nullptr,
+        static_cast<void*>(valueBuf.data()),
+        &cbData
+    );
+    while (rc == ERROR_MORE_DATA)
+    {
+        // Get a buffer that is big enough.
+        cbData /= sizeof(wchar_t);
+        if (cbData > static_cast<DWORD>(bufferSize))
+        {
+            bufferSize = static_cast<size_t>(cbData);
+        }
+        else
+        {
+            bufferSize *= 2;
+            cbData = static_cast<DWORD>(bufferSize * sizeof(wchar_t));
+        }
+        valueBuf.resize(bufferSize);
+        rc = RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            regSubKey.c_str(),
+            regValue.c_str(),
+            RRF_RT_REG_SZ,
+            nullptr,
+            static_cast<void*>(valueBuf.data()),
+            &cbData
+        );
+    }
+    if (rc == ERROR_SUCCESS)
+    {
+        cbData /= sizeof(wchar_t);
+        valueBuf.resize(static_cast<size_t>(cbData - 1)); // remove end null character
+        return valueBuf;
+    }
+    else
+    {
+        throw std::runtime_error("Windows system error code: " + std::to_string(rc));
+    }
+}
 
 QByteArray toSJIS(const QString &str)
 {
@@ -117,32 +169,28 @@ void CAtlasServer::uninit()
 
 bool CAtlasServer::haveJapanese(const QString &str)
 {
-    const ushort lowHiragana = 0x3040;
-    const ushort highHiragana = 0x309f;
-    const ushort lowKatakana = 0x30a0;
-    const ushort highKatakana = 0x30ff;
-    const ushort lowCJK = 0x4e00;
-    const ushort highCJK = 0x9fff;
+    return std::any_of(str.constBegin(),str.constEnd(),[](QChar c){
+        constexpr ushort lowHiragana = 0x3040;
+        constexpr ushort highHiragana = 0x309f;
+        constexpr ushort lowKatakana = 0x30a0;
+        constexpr ushort highKatakana = 0x30ff;
+        constexpr ushort lowCJK = 0x4e00;
+        constexpr ushort highCJK = 0x9fff;
 
-    for (const auto &c : str) {
         ushort u = c.unicode();
         if (u>=lowHiragana && u<=highHiragana) return true; // hiragana
         if (u>=lowKatakana && u<=highKatakana) return true; // katakana
         if (u>=lowCJK && u<=highCJK) return true; // CJK
-    }
-    return false;
+        return false;
+    });
 }
 
 QString CAtlasServer::translate(AtlasDirection transDirection, const QString &str)
 {
     if (!isLoaded()) return QSL("ERR");
 
-	char *outjis = nullptr;
-	void *unsure = nullptr;
-    unsigned int maybeSize = 0U;
-    char *temp = toSJIS(str).data();
+    QMutexLocker locker(&atlasMutex);
 
-    atlasMutex.lock();
     AtlasDirection od = m_internalDirection;
     if (m_atlasTransDirection != transDirection) {
         m_atlasTransDirection = transDirection;
@@ -171,9 +219,14 @@ QString CAtlasServer::translate(AtlasDirection transDirection, const QString &st
             return QSL("ERR");
     }
 
+    char *outjis = nullptr;
+    void *unsure = nullptr;
+    unsigned int maybeSize = 0U;
+    QByteArray injis = toSJIS(str);
+    auto *temp = injis.data();
+
     // I completely ignore return value.  Not sure if it matters.
     TranslatePair(temp, &outjis, &unsure, &maybeSize);
-    atlasMutex.unlock();
 
 	if (unsure)
 		FreeAtlasData(unsure,nullptr,nullptr,nullptr);
@@ -209,23 +262,23 @@ QStringList CAtlasServer::getEnvironments()
 
 bool CAtlasServer::loadDLLs()
 {
-    if (h_atlecont.isLoaded() &&
-            h_awdict.isLoaded() &&
-            h_awuenv.isLoaded()) {
+    if (h_atlecont.isLoaded() && h_awdict.isLoaded() && h_awuenv.isLoaded())
         return true;
-    }
 
-    for (int v = 14; v>=13; v--) {
-        wchar_t buf[MAX_PATH*2] { 0 };
-        const QString temp(QSL("Software\\Fujitsu\\ATLAS\\V%1.0\\EJ").arg(v));
-        temp.toWCharArray(buf);
+    constexpr int atlasVersionLow = 13;
+    constexpr int atlasVersionHigh = 14;
+
+    for (int v = atlasVersionHigh; v>=atlasVersionLow; v--) {
+        std::wstring buf = QSL("Software\\Fujitsu\\ATLAS\\V%1.0\\EJ").arg(v).toStdWString();
         HKEY hKey = nullptr;
-        if (ERROR_SUCCESS != RegOpenKeyW(HKEY_CURRENT_USER, buf, &hKey))
+        if (ERROR_SUCCESS != RegOpenKeyW(HKEY_CURRENT_USER, buf.data(), &hKey))
             continue;
 
-        DWORD type;
-        DWORD size = sizeof(buf)-2;
-        int res = RegQueryValueExW(hKey, L"TRENV EJ", nullptr, &type, reinterpret_cast<BYTE*>(buf), &size);
+        buf.assign(MAX_PATH*2, 0);
+        DWORD type = REG_NONE;
+        DWORD size = (buf.length()-1) * sizeof(wchar_t);
+        RegGetValueW(hKey,()
+        int res = RegQueryValueExW(hKey, L"TRENV EJ", nullptr, &type, reinterpret_cast<BYTE*>(buf.data()), &size);
         RegCloseKey(hKey);
 
         if (ERROR_SUCCESS != res || type != REG_SZ)
@@ -274,10 +327,10 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
             )
     {
         m_environment = environment;
-        const int dunnoSize = 4000;
-        static std::array<int,dunnoSize> dunno = {0};
-        static int dunno2[1000] = {0};
-        if (0 == AtlInitEngineData(0, 2, dunno, 0, dunno2) &&
+        const int dunnoSize = 1000;
+        static std::array<int,dunnoSize> dunno1 = {0};
+        static std::array<int,dunnoSize> dunno2 = {0};
+        if (0 == AtlInitEngineData(0, 2, dunno1.data(), 0, dunno2.data()) &&
                 1 == CreateEngine(1, static_cast<int>(transDirection), 0, toSJIS(m_environment).data()))
         {
             if (forceDirectionChange) {
