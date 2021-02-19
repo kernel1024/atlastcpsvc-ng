@@ -9,7 +9,8 @@
 #include <QDebug>
 
 CServer::CServer(QObject *parent)
-    : QTcpServer(parent)
+    : QTcpServer(parent),
+    m_atlasHost(QHostAddress(CDefaults::atlHost))
 {
     loadSettings();
     connect(this, &QTcpServer::newConnection, this, &CServer::acceptConnections);
@@ -124,7 +125,8 @@ void CServer::loadSettings()
     settings.beginGroup(QSL("Server"));
 
     m_atlasPort = settings.value(QSL("port"),CDefaults::atlPort).toInt();
-    m_atlasHost = QHostAddress(settings.value(QSL("host"),CDefaults::atlHost).toUInt());
+    m_atlasHost = QHostAddress(settings.value(QSL("host"),
+        QHostAddress(CDefaults::atlHost).toIPv4Address()).toUInt());
     m_atlasEnv = settings.value(QSL("atlasEnvironment"),QSL("General")).toString();
 
     QByteArray buf;

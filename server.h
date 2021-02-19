@@ -27,7 +27,7 @@ private:
 
     int m_atlasPort { CDefaults::atlPort };
     bool m_disabled { false };
-    QHostAddress m_atlasHost { CDefaults::atlHost };
+    QHostAddress m_atlasHost;
     QSslKey m_privateKey;
     QSslCertificate m_serverCert;
     QStringList m_clientTokens;
