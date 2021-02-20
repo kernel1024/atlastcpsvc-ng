@@ -10,10 +10,14 @@
 
 CServer::CServer(QObject *parent)
     : QTcpServer(parent),
-    m_atlasHost(QHostAddress(CDefaults::atlHost))
+    m_atlasHost(QHostAddress(CDefaults::atlHost)),
+    m_atlas(new CAtlasServer(this))
 {
     loadSettings();
     connect(this, &QTcpServer::newConnection, this, &CServer::acceptConnections);
+
+    if (!m_atlas->init(CAtlasServer::Atlas_JE, m_atlasEnv))
+        qCritical() << "Unable to load ATLAS engine";
 }
 
 CServer::~CServer()
@@ -21,23 +25,23 @@ CServer::~CServer()
     closeSocket();
 }
 
-void CServer::start()
+bool CServer::start()
 {
-    if (isListening()) return;
+    if (isListening()) return false;
+    if (m_atlas.isNull()) return false;
 
-    if (!atlasServer.isLoaded()) {
-        if (!atlasServer.init(CAtlasServer::Atlas_JE, m_atlasEnv)) {
-            qCritical() << "Unable to load ATLAS engine";
-            return;
-        }
+    if (!isAtlasLoaded()) {
+        qWarning() << "ATLAS engine not loaded";
+        return false;
     }
 
     if (m_privateKey.isNull() || m_serverCert.isNull()) {
         qWarning() << "Credentials is empty, unable to open socket";
-        return;
+        return false;
     }
 
     listen(m_atlasHost, m_atlasPort);
+    return true;
 }
 
 void CServer::pause()
@@ -96,6 +100,14 @@ QString CServer::atlasEnv() const
     return m_atlasEnv;
 }
 
+QStringList CServer::atlasEnvironments() const
+{
+    QStringList res;
+    if (m_atlas)
+        res = m_atlas->getEnvironments();
+    return res;
+}
+
 QStringList CServer::clientTokens() const
 {
     return m_clientTokens;
@@ -142,6 +154,14 @@ void CServer::loadSettings()
     settings.endGroup();
 }
 
+bool CServer::isAtlasLoaded() const
+{
+    if (m_atlas)
+        return m_atlas->isLoaded();
+
+    return false;
+}
+
 void CServer::incomingConnection(qintptr socket)
 {
     if (m_disabled)
@@ -177,9 +197,6 @@ void CServer::acceptConnections()
 
 void CServer::readClient()
 {
-    if (m_disabled)
-        return;
-
     static const QString cmdInit(QSL("INIT:"));
     static const QString cmdDir(QSL("DIR:"));
     static const QString cmdTr(QSL("TR:"));
@@ -188,6 +205,12 @@ void CServer::readClient()
     auto* socket = qobject_cast<CAtlasSocket *>(sender());
     if (socket == nullptr) return;
     if (!socket->isEncrypted()) return;
+
+    if (m_disabled || m_atlas.isNull()) {
+        socket->setAuthenticated(false);
+        socket->close();
+        return;
+    }
 
     bool needCloseSocket = false;
     bool handled = false;
@@ -232,7 +255,7 @@ void CServer::readClient()
                 if (s.isEmpty()) {
                     socket->write("ERR:NULL_STR_DECODED\r\n");
                 } else {
-                    s = atlasServer.translate(socket->direction(),s);
+                    s = m_atlas->translate(socket->direction(),s);
                     if (s.startsWith(QSL("ERR"))) {
                         socket->write("ERR:TRANS_FAILED\r\n");
                     } else {

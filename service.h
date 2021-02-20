@@ -2,7 +2,7 @@
 #define SERVICE_H
 
 #include <QCoreApplication>
-#include <QScopedPointer>
+#include <QPointer>
 #include "qtservice.h"
 #include "server.h"
 
@@ -20,6 +20,9 @@ public:
     static int runAs(const QString& app, const QString& arguments,
                      bool waitToFinish = false);
     static QString getCurrentUserName();
+    void initializeServer(QCoreApplication *app);
+    QPointer<CServer> daemon() const;
+
 protected:
     void start() override;
     void pause() override;
@@ -29,7 +32,7 @@ private:
     Q_DISABLE_COPY(CService)
     Q_DISABLE_MOVE(CService)
 
-    QScopedPointer<CServer,QScopedPointerDeleteLater> daemon;
+    QPointer<CServer> m_daemon;
 };
 
 #endif // SERVICE_H

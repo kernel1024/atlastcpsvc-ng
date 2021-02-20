@@ -1,8 +1,10 @@
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <windows.h>
 #include <lmcons.h>
-#include <array>
 #include <string>
+#include <array>
+
 #include "service.h"
 #include "qsl.h"
 
@@ -17,16 +19,20 @@ int CService::runAs(const QString& app, const QString& arguments, bool waitToFin
         qCritical() << "Executable module not found. Incorrect parameters.";
         return -1;
     }
+
+    std::wstring wAppFullPath = appFullPath.toStdWString();
+    std::wstring wArguments = arguments.toStdWString();
+
     // Setup the required structure
     SHELLEXECUTEINFO ShExecInfo;
     memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFO));
     ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
     ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
     ShExecInfo.lpVerb = L"runas";
-    if (appFullPath.length() > 0)
-        ShExecInfo.lpFile = reinterpret_cast<const WCHAR *>(appFullPath.utf16());
-    if (arguments.length() > 0)
-        ShExecInfo.lpParameters = reinterpret_cast<const WCHAR *>(arguments.utf16());
+    if (!wAppFullPath.empty())
+        ShExecInfo.lpFile = &wAppFullPath[0];
+    if (!wArguments.empty())
+        ShExecInfo.lpParameters = &wArguments[0];
     ShExecInfo.nShow = SW_SHOW;
 
     // Spawn the process
@@ -46,100 +52,65 @@ int CService::runAs(const QString& app, const QString& arguments, bool waitToFin
 QString CService::getCurrentUserName()
 {
     std::wstring acUserName;
-    acUserName.resize(UNLEN + 1);
+    acUserName.resize(UNLEN + 1,L'\0');
     DWORD nUserName = acUserName.length();
-    if (GetUserNameW(acUserName.data(), &nUserName))
-        return QString::fromWCharArray(acUserName.data());
+    if (GetUserNameW(&acUserName[0], &nUserName) != FALSE) {
+        wsRtrim(acUserName);
+        return QString::fromStdWString(acUserName);
+    }
+
     return QString();
 }
 
 bool CService::testProcessToken(ProcessToken checkToken)
 {
-    HANDLE hProcessToken = NULL;
-    DWORD groupLength = 50;
+    HANDLE hProcessToken = nullptr;
+    PSID InteractiveSid = nullptr;
 
-    PTOKEN_GROUPS groupInfo = (PTOKEN_GROUPS)LocalAlloc(0, groupLength);
+    auto cleanup = qScopeGuard([&InteractiveSid, &hProcessToken]{
+        if (InteractiveSid)
+            FreeSid(InteractiveSid);
+        if (hProcessToken)
+            CloseHandle(hProcessToken);
+    });
 
-    SID_IDENTIFIER_AUTHORITY siaNt = SECURITY_NT_AUTHORITY;
-    PSID InteractiveSid = NULL;
-    PSID ServiceSid = NULL;
-    DWORD i;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hProcessToken) == FALSE)
+        return false;
 
-    // Start with assumption that process is an EXE, not a Service.
-    bool fret = true;
-
-    if (!OpenProcessToken(GetCurrentProcess(),
-                          TOKEN_QUERY,
-                          &hProcessToken))
-        goto ret;
-
-    if (groupInfo == NULL)
-        goto ret;
-
-    if (!GetTokenInformation(hProcessToken, TokenGroups, groupInfo,
-        groupLength, &groupLength))
-    {
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-            goto ret;
-
-        LocalFree(groupInfo);
-        groupInfo = NULL;
-        groupInfo = (PTOKEN_GROUPS)LocalAlloc(0, groupLength);
-
-        if (groupInfo == NULL)
-            goto ret;
-
-        if (checkToken==Process_IsInteractive) {
-            if (!GetTokenInformation(hProcessToken, TokenGroups, groupInfo,
-                                     groupLength, &groupLength))
-                goto ret;
-        } else if (checkToken==Process_HaveAdminRights) {
-            fret = false;
-            TOKEN_ELEVATION elevation;
-            DWORD cbSize = sizeof(TOKEN_ELEVATION);
-            if (GetTokenInformation(hProcessToken, TokenElevation, &elevation,
-                                    sizeof(elevation), &cbSize))
-                fret = elevation.TokenIsElevated!=0;
-            goto ret;
-        } else
-            goto ret;
+    if (checkToken == Process_HaveAdminRights) {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hProcessToken, TokenElevation, &elevation, cbSize, &cbSize) != FALSE)
+            return (elevation.TokenIsElevated != 0);
+        return false;
     }
 
+    if (checkToken==Process_IsInteractive) {
+        std::vector<BYTE> bufGroupInfo;
+        DWORD groupLength = bufGroupInfo.size();
 
-    if (!AllocateAndInitializeSid(&siaNt, 1, SECURITY_INTERACTIVE_RID, 0, 0,
-        0, 0, 0, 0, 0, &InteractiveSid))
-        goto ret;
+        if (GetTokenInformation(hProcessToken, TokenGroups, nullptr, 0, &groupLength) == FALSE) {
+            if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+                return false;
 
-    if (!AllocateAndInitializeSid(&siaNt, 1, SECURITY_SERVICE_RID, 0, 0, 0,
-        0, 0, 0, 0, &ServiceSid))
-        goto ret;
+            bufGroupInfo.resize(groupLength);
+            if (GetTokenInformation(hProcessToken, TokenGroups, &bufGroupInfo[0], groupLength, &groupLength) == FALSE)
+                return false;
 
-    for (i = 0; i < groupInfo->GroupCount ; i += 1)
-    {
-        SID_AND_ATTRIBUTES sanda = groupInfo->Groups[i];
-        PSID Sid = sanda.Sid;
+            SID_IDENTIFIER_AUTHORITY siaNt = SECURITY_NT_AUTHORITY;
+            if (AllocateAndInitializeSid(&siaNt, 1, SECURITY_INTERACTIVE_RID, 0, 0,
+                0, 0, 0, 0, 0, &InteractiveSid) == FALSE)
+                return false;
 
-        if (EqualSid(Sid, InteractiveSid))
-            goto ret;
-        else if (EqualSid(Sid, ServiceSid)) {
-            fret = false;
-            goto ret;
+            auto* const groupInfo = reinterpret_cast<PTOKEN_GROUPS>(&bufGroupInfo[0]);
+            for (DWORD i = 0; i < groupInfo->GroupCount ; i++) {
+                if (EqualSid(groupInfo->Groups[i].Sid, InteractiveSid) != FALSE) // NOLINT
+                    return true;
+            }
         }
     }
 
-    fret = false;
-
-ret:
-    if (InteractiveSid)
-        FreeSid(InteractiveSid);
-    if (ServiceSid)
-        FreeSid(ServiceSid);
-    if (groupInfo)
-        LocalFree(groupInfo);
-    if (hProcessToken)
-        CloseHandle(hProcessToken);
-
-    return(fret);
+    return false;
 }
 
 CService::CService(int argc, char **argv)
@@ -152,14 +123,25 @@ CService::CService(int argc, char **argv)
 
 CService::~CService() = default;
 
+void CService::initializeServer(QCoreApplication* app)
+{
+    if (m_daemon) return;
+    if (app == nullptr) return;
+
+    m_daemon = new CServer(app);
+}
+
 void CService::start()
 {
-    QCoreApplication *app = application();
+    if (m_daemon.isNull()) {
+        initializeServer(application());
+        if (m_daemon.isNull()) {
+            qCritical() << "Failed to initialize ATLAS service";
+            QCoreApplication::quit();
+        }
+    }
 
-    daemon.reset(new CServer(app));
-    daemon->start();
-
-    if (!daemon->isListening()) {
+    if (!m_daemon->start() || !m_daemon->isListening()) {
         qCritical() << "Failed to start ATLAS service";
         QCoreApplication::quit();
     }
@@ -167,10 +149,15 @@ void CService::start()
 
 void CService::pause()
 {
-    daemon->pause();
+    m_daemon->pause();
 }
 
 void CService::resume()
 {
-    daemon->resume();
+    m_daemon->resume();
+}
+
+QPointer<CServer> CService::daemon() const
+{
+    return m_daemon;
 }

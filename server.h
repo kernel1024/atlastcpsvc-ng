@@ -1,6 +1,7 @@
 #ifndef CSERVER_H
 #define CSERVER_H
 
+#include <QPointer>
 #include <QTcpServer>
 #include <QSslKey>
 #include <QSslCertificate>
@@ -18,7 +19,7 @@ public:
     explicit CServer(QObject *parent = nullptr);
     ~CServer() override;
 
-    void start();
+    bool start();
     void pause();
     void resume();
 
@@ -33,15 +34,19 @@ private:
     QStringList m_clientTokens;
     QString m_atlasEnv;
 
+    QPointer<CAtlasServer> m_atlas;
+
     void loadSettings();
 
 public:
+    bool isAtlasLoaded() const;
     int atlasPort() const;
     QHostAddress atlasHost() const;
     QSslKey privateKey() const;
     QSslCertificate serverCert() const;
     QStringList clientTokens() const;
     QString atlasEnv() const;
+    QStringList atlasEnvironments() const;
 
     void setAtlasPort(int port);
     void setAtlasHost(const QHostAddress &host);

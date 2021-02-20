@@ -2,29 +2,30 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "server.h"
+#include <QScopedPointer>
 #include "qtservice.h"
+#include "service.h"
 
 namespace Ui {
 class MainWindow;
 }
 
-class MainWindow : public QMainWindow
+class CMainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = 0);
-    ~MainWindow();
+    explicit CMainWindow(QWidget *parent = 0);
+    ~CMainWindow() override;
 
-    void updateServiceController(QtServiceController *svctl=NULL);
+    void updateService(CService *service);
+    void updateWidgets();
 
 private:
-    Ui::MainWindow *ui;
-    CServer *daemon;
-    QtServiceController* m_svctl;
-    void initializeUiParams();
-    void showSSLParams();
+    Ui::MainWindow *ui { nullptr };
+    QScopedPointer<QtServiceController> m_svctl;
+    CService* m_service;
+    void updateSSLWidgets();
 
 public slots:
     void addToken();

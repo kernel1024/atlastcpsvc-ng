@@ -22,7 +22,6 @@
 
 // TODO: move from globals to singleton
 
-CAtlasServer atlasServer;
 QMutex atlasMutex;
 QMutex atlasInitMutex;
 
@@ -90,12 +89,6 @@ CAtlasServer::~CAtlasServer()
 {
     if (isLoaded())
         uninit();
-}
-
-CAtlasServer &CAtlasServer::instance()
-{
-    static CAtlasServer instance;
-    return instance;
 }
 
 int CAtlasServer::getTransDirection() const

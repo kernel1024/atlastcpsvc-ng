@@ -25,7 +25,6 @@ public:
     };
     explicit CAtlasServer(QObject *parent = nullptr);
     ~CAtlasServer() override;
-    static CAtlasServer& instance();
 
     // returns 0 if not initialized.
     int getTransDirection() const;
@@ -54,7 +53,5 @@ private:
     HMODULE h_awdict { nullptr };
     HMODULE h_awuenv { nullptr };
 };
-
-extern CAtlasServer atlasServer;
 
 #endif // ATLAS_H
