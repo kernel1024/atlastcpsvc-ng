@@ -133,10 +133,12 @@ public:
     ServiceFlags serviceFlags() const;
     void setServiceFlags(ServiceFlags flags);
 
+    bool isInstalled() const;
+
     int exec();
 
     void logMessage(const QString &message, MessageType type = Success,
-                int id = 0, uint category = 0, const QByteArray &data = QByteArray());
+                int id = 1000, uint category = 0, const QByteArray &data = QByteArray());
 
     static QtServiceBase *instance();
 

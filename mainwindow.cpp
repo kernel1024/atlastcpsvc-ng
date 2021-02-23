@@ -42,12 +42,8 @@ CMainWindow::~CMainWindow()
 
 void CMainWindow::updateService(CService *service)
 {
-    m_svctl.reset();
     m_service = service;
-
     if (m_service == nullptr) return;
-
-    m_svctl.reset(new QtServiceController(m_service->serviceName()));
 
     if (!m_service->daemon()->isAtlasLoaded()) {
         QMessageBox::critical(nullptr,QGuiApplication::applicationDisplayName(),
@@ -65,12 +61,10 @@ void CMainWindow::updateWidgets()
     ui->btnSvcInstall->setEnabled(false);
     ui->btnSvcUninstall->setEnabled(false);
 
-    if (!m_svctl.isNull()) {
-        ui->btnSvcInstall->setEnabled(!m_svctl->isInstalled());
-        ui->btnSvcUninstall->setEnabled(m_svctl->isInstalled());
-    }
-
     if (m_service == nullptr) return;
+
+    ui->btnSvcInstall->setEnabled(!m_service->isInstalled());
+    ui->btnSvcUninstall->setEnabled(m_service->isInstalled());
 
     const auto daemon = m_service->daemon();
 
@@ -82,6 +76,7 @@ void CMainWindow::updateWidgets()
     if (env.contains(daemon->atlasEnv()))
         ui->listEnvironment->setCurrentIndex(env.indexOf(daemon->atlasEnv()));
 
+    ui->listTokens->clear();
     ui->listTokens->addItems(daemon->clientTokens());
 
     ui->lblUserName->setText(CService::getCurrentUserName());
@@ -249,6 +244,8 @@ void CMainWindow::saveSettings()
 
 void CMainWindow::installSerivce()
 {
+    if (m_service == nullptr) return;
+
     QDialog dlg(this);
     Ui::loginDialog ldui;
     ldui.setupUi(&dlg);
@@ -260,7 +257,7 @@ void CMainWindow::installSerivce()
     dlg.setWindowTitle(tr("%1 service login").arg(QGuiApplication::applicationDisplayName()));
 
     if (dlg.exec() == QDialog::Accepted) {
-        if (!m_svctl.isNull() && !m_svctl->isInstalled()) {
+        if (!m_service->isInstalled()) {
             QString params = QString("-i");
             if (!ldui.editUser->text().isEmpty()) {
                 params.append(QString(" %1").arg(ldui.editUser->text()));
@@ -278,7 +275,9 @@ void CMainWindow::installSerivce()
 
 void CMainWindow::uninstallSerivce()
 {
-    if (!m_svctl.isNull() && m_svctl->isInstalled()) {
+    if (m_service == nullptr) return;
+
+    if (m_service->isInstalled()) {
         if (CService::runAs(QString(),"-u",true) != 0) {
             QMessageBox::critical(this,QGuiApplication::applicationDisplayName(),
                                   tr("Unable to uninstall service."));

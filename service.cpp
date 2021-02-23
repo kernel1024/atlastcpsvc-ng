@@ -8,6 +8,31 @@
 #include "service.h"
 #include "qsl.h"
 
+void CService::logMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    QtServiceBase::MessageType svcType = QtServiceBase::MessageType::Success;
+    const QString logMsg = qFormatLogMessage(type,context,msg);
+    switch (type) {
+        case QtInfoMsg:
+        case QtDebugMsg:
+            svcType = QtServiceBase::MessageType::Information;
+            break;
+        case QtCriticalMsg:
+        case QtFatalMsg:
+            svcType = QtServiceBase::MessageType::Error;
+            break;
+        case QtWarningMsg:
+            svcType = QtServiceBase::MessageType::Warning;
+            break;
+    }
+
+    QtServiceBase *service = QtServiceBase::instance();
+    if (service)
+        service->logMessage(logMsg,svcType,1000);
+
+    fprintf(stderr, "%s", logMsg.toLocal8Bit().constData()); // NOLINT
+}
+
 int CService::runAs(const QString& app, const QString& arguments, bool waitToFinish)
 {
     QString appFullPath = app;
@@ -55,7 +80,7 @@ QString CService::getCurrentUserName()
     acUserName.resize(UNLEN + 1,L'\0');
     DWORD nUserName = acUserName.length();
     if (GetUserNameW(&acUserName[0], &nUserName) != FALSE) {
-        wsRtrim(acUserName);
+        wsZeroRightTrim(acUserName);
         return QString::fromStdWString(acUserName);
     }
 
@@ -116,6 +141,14 @@ bool CService::testProcessToken(ProcessToken checkToken)
 CService::CService(int argc, char **argv)
     : QtService<QCoreApplication>(argc, argv, QSL("ATLAS TCP NG Service"))
 {
+    qSetMessagePattern(QSL("%{if-debug}Debug%{endif}"
+                           "%{if-info}Info%{endif}"
+                           "%{if-warning}Warning%{endif}"
+                           "%{if-critical}Error%{endif}"
+                           "%{if-fatal}Fatal%{endif}"
+                           ": %{message} (%{file}:%{line})"));
+    qInstallMessageHandler(CService::logMessageHandler);
+
     setServiceDescription(QSL("ATLAS translation engine TCP service with SSL support, implemented with Qt."));
     setServiceFlags(QtServiceBase::CanBeSuspended);
     setStartupType(QtServiceController::AutoStartup);

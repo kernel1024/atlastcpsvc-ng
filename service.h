@@ -33,6 +33,7 @@ private:
     Q_DISABLE_MOVE(CService)
 
     QPointer<CServer> m_daemon;
+    static void logMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 };
 
 #endif // SERVICE_H

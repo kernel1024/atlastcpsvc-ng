@@ -725,6 +725,11 @@ QtServiceController::StartupType QtServiceBase::startupType() const
     return d_ptr->startupType;
 }
 
+bool QtServiceBase::isInstalled() const
+{
+    return d_ptr->controller.isInstalled();
+}
+
 /*!
     Sets the service's startup type to the given \a type.
 

@@ -23,7 +23,6 @@ public:
 
 private:
     Ui::MainWindow *ui { nullptr };
-    QScopedPointer<QtServiceController> m_svctl;
     CService* m_service;
     void updateSSLWidgets();
 

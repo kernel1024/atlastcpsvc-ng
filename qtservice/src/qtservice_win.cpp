@@ -54,6 +54,7 @@
 #include <QAbstractEventDispatcher>
 #include <QVector>
 #include <QThread>
+#include <QSettings>
 #if QT_VERSION >= 0x050000
 #  include <QAbstractNativeEventFilter>
 #endif
@@ -103,6 +104,10 @@ static PQueryServiceConfig2 pQueryServiceConfig2 = 0;
 #define RESOLVE(name) p##name = (P##name)lib.resolve(#name);
 #define RESOLVEA(name) p##name = (P##name)lib.resolve(#name"A");
 #define RESOLVEW(name) p##name = (P##name)lib.resolve(#name"W");
+
+namespace CDefaults {
+const auto eventLogCategory = "Application";
+}
 
 static bool winServiceInit()
 {
@@ -286,6 +291,15 @@ bool QtServiceController::uninstall()
         }
         pCloseServiceHandle(hSCM);
     }
+
+    if (result) {
+        QSettings registry(QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\%1")
+                           .arg(CDefaults::eventLogCategory),QSettings::NativeFormat);
+        registry.beginGroup(d->serviceName);
+        registry.remove(QString());
+        registry.endGroup();
+    }
+
     return result;
 }
 
@@ -901,6 +915,18 @@ bool QtServiceBasePrivate::install(const QString &account, const QString &passwo
         }
         pCloseServiceHandle(hSCM);
     }
+
+    // install Event Log category
+    const int typesSupported = 7; // Flags: error | warning | info
+    if (result) {
+        QSettings registry(QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\%1")
+                           .arg(CDefaults::eventLogCategory),QSettings::NativeFormat);
+        registry.beginGroup(controller.serviceName());
+        registry.setValue(QStringLiteral("EventMessageFile"),QStringLiteral("C:\\Windows\\System32\\mscoree.dll"));
+        registry.setValue(QStringLiteral("TypesSupported"),typesSupported);
+        registry.endGroup();
+    }
+
     return result;
 }
 

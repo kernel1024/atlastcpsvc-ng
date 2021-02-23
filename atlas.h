@@ -11,6 +11,7 @@
 #define ATLAS_H
 
 #include <QObject>
+#include <QDir>
 #include <windows.h>
 
 class CAtlasServer : public QObject
@@ -43,7 +44,7 @@ public:
     bool haveJapanese(const QString &str);
 private:
     QString m_environment;
-    QString atlasPath;
+    QDir m_atlasDir;
     int m_atlasVersion { 0 };
     AtlasDirection m_atlasTransDirection { Atlas_JE };
     AtlasDirection m_internalDirection { Atlas_JE };

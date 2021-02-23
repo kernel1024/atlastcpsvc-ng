@@ -7,15 +7,9 @@
 
 #define QSL QStringLiteral
 
-inline void wsLtrim(std::wstring &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](wchar_t ch) {
-        return !std::isspace(ch);
-    }));
-}
-
-inline void wsRtrim(std::wstring &s) {
+inline void wsZeroRightTrim(std::wstring &s) {
     s.erase(std::find_if(s.rbegin(), s.rend(), [](wchar_t ch) {
-        return !std::isspace(ch);
+        return (ch != '\0');
     }).base(), s.end());
 }
 

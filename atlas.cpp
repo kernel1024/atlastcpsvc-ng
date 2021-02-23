@@ -209,7 +209,7 @@ QStringList CAtlasServer::getEnvironments()
     QStringList res;
     if (!isLoaded()) return res;
 
-    QFile f(QDir(atlasPath).absoluteFilePath(QSL("transenv.ini")));
+    QFile f(m_atlasDir.filePath(QSL("transenv.ini")));
     if (!f.open(QIODevice::ReadOnly)) return res;
     QTextStream fs(&f);
     fs.setCodec("SJIS");
@@ -248,7 +248,7 @@ bool CAtlasServer::loadDLLs()
         h_awuenv = LoadLibraryExW(w_awuenv.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 
         if (isDLLsLoaded()) {
-            atlasPath = newPath;
+            m_atlasDir = atlasDir;
             m_atlasVersion = v;
             return true;
         }

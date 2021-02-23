@@ -77,7 +77,8 @@ void CServer::deleteToken(const QString &token)
 
 void CServer::addToken(const QString &token)
 {
-    m_clientTokens.append(token);
+    if (!m_clientTokens.contains(token))
+        m_clientTokens.append(token);
 }
 
 void CServer::setServerCert(const QSslCertificate &serverCert)
