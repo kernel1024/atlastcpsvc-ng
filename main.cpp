@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
         if (is64bit) {
             MessageBoxW(nullptr, L"Compiled in 64bit mode, incompatible with 32bit ATLAS engine. Aborting.",
                         L"AtlasTCPsvc-NG", MB_ICONEXCLAMATION | MB_OK);
-            return 1;
+            return -1;
         }
 
         QApplication app(argc, argv);
@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
         return app.exec();
     }
 
-    if (is64bit) return 1;
+    if (is64bit) return -1;
 
     return service.exec();
 }

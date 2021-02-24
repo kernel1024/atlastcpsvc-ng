@@ -55,25 +55,25 @@ public:
 class QtServiceBasePrivate
 {
     Q_DECLARE_PUBLIC(QtServiceBase)
+    Q_DISABLE_COPY(QtServiceBasePrivate)
+
 public:
-
-    QtServiceBasePrivate(const QString &name);
-    ~QtServiceBasePrivate();
-
     QtServiceBase *q_ptr;
-
-    QString serviceDescription;
     QtServiceController::StartupType startupType;
     QtServiceBase::ServiceFlags serviceFlags;
+    QString serviceDescription;
     QStringList args;
+    QtServiceController controller;
+    class QtServiceSysPrivate *sysd;
 
     static class QtServiceBase *instance;
 
-    QtServiceController controller;
+    QtServiceBasePrivate(QtServiceBase* base, const QString &name);
+    virtual ~QtServiceBasePrivate();
 
     void startService();
     int run(bool asService, const QStringList &argList);
-    bool install(const QString &account, const QString &password);
+    bool install(const QString &account, const QString &password) const;
 
     bool start();
 
@@ -81,7 +81,6 @@ public:
     bool sysInit();
     void sysSetPath();
     void sysCleanup();
-    class QtServiceSysPrivate *sysd;
 };
 
 #endif

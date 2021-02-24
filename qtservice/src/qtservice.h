@@ -42,36 +42,22 @@
 #define QTSERVICE_H
 
 #include <QCoreApplication>
+#include <QScopedPointer>
+#include <QStringList>
 
-#if defined(Q_OS_WIN)
-#  if !defined(QT_QTSERVICE_EXPORT) && !defined(QT_QTSERVICE_IMPORT)
-#    define QT_QTSERVICE_EXPORT
-#  elif defined(QT_QTSERVICE_IMPORT)
-#    if defined(QT_QTSERVICE_EXPORT)
-#      undef QT_QTSERVICE_EXPORT
-#    endif
-#    define QT_QTSERVICE_EXPORT __declspec(dllimport)
-#  elif defined(QT_QTSERVICE_EXPORT)
-#    undef QT_QTSERVICE_EXPORT
-#    define QT_QTSERVICE_EXPORT __declspec(dllexport)
-#  endif
-#else
-#  define QT_QTSERVICE_EXPORT
-#endif
-
-class QStringList;
 class QtServiceControllerPrivate;
 
-class QT_QTSERVICE_EXPORT QtServiceController
+class QtServiceController
 {
     Q_DECLARE_PRIVATE(QtServiceController)
+    Q_DISABLE_COPY(QtServiceController)
 public:
     enum StartupType
     {
 	    AutoStartup = 0, ManualStartup
     };
 
-    QtServiceController(const QString &name);
+    explicit QtServiceController(const QString &name);
     virtual ~QtServiceController();
 
     bool isInstalled() const;
@@ -99,9 +85,8 @@ private:
 
 class QtServiceBasePrivate;
 
-class QT_QTSERVICE_EXPORT QtServiceBase
+class QtServiceBase
 {
-    Q_DECLARE_PRIVATE(QtServiceBase)
 public:
 
     enum MessageType
@@ -138,7 +123,7 @@ public:
     int exec();
 
     void logMessage(const QString &message, MessageType type = Success,
-                int id = 1000, uint category = 0, const QByteArray &data = QByteArray());
+                int id = 0, uint category = 0, const QByteArray &data = QByteArray());
 
     static QtServiceBase *instance();
 
@@ -155,9 +140,10 @@ protected:
     virtual int executeApplication() = 0;
 
 private:
-
     friend class QtServiceSysPrivate;
-    QtServiceBasePrivate *d_ptr;
+    Q_DECLARE_PRIVATE_D(d_ptr,QtServiceBase)
+    Q_DISABLE_COPY(QtServiceBase)
+    QScopedPointer<QtServiceBasePrivate> d_ptr;
 };
 
 template <typename Application>
@@ -167,7 +153,7 @@ public:
     QtService(int argc, char **argv, const QString &name)
         : QtServiceBase(argc, argv, name), app(0)
     {  }
-    ~QtService()
+    ~QtService() override
     {
     }
 
@@ -175,14 +161,14 @@ protected:
     Application *application() const
     { return app; }
 
-    virtual void createApplication(int &argc, char **argv)
+    void createApplication(int &argc, char **argv) override
     {
         app = new Application(argc, argv);
         QCoreApplication *a = app;
         Q_UNUSED(a);
     }
 
-    virtual int executeApplication()
+    int executeApplication() override
     { return Application::exec(); }
 
 private:

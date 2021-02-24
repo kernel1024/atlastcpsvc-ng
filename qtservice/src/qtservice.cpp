@@ -41,109 +41,10 @@
 #include "qtservice.h"
 #include "qtservice_p.h"
 #include <QCoreApplication>
-#include <stdio.h>
+#include <cstdio>
 #include <QTimer>
 #include <QVector>
 #include <QProcess>
-
-#if defined(QTSERVICE_DEBUG)
-#include <QDebug>
-#include <QString>
-#include <QFile>
-#include <QTime>
-#include <QMutex>
-#if defined(Q_OS_WIN32)
-#include <qt_windows.h>
-#else
-#include <unistd.h>
-#include <stdlib.h>
-#endif
-
-static QFile* f = 0;
-
-static void qtServiceCloseDebugLog()
-{
-    if (!f)
-        return;
-    f->write(QTime::currentTime().toString("HH:mm:ss.zzz").toLatin1());
-    f->write(" --- DEBUG LOG CLOSED ---\n\n");
-    f->flush();
-    f->close();
-    delete f;
-    f = 0;
-}
-
-#if QT_VERSION >= 0x050000
-void qtServiceLogDebug(QtMsgType type, const QMessageLogContext &context, const QString &msg)
-#else
-void qtServiceLogDebug(QtMsgType type, const char* msg)
-#endif
-{
-    static QMutex mutex;
-    QMutexLocker locker(&mutex);
-#if defined(Q_OS_WIN32)
-    const qulonglong processId = GetCurrentProcessId();
-#else
-    const qulonglong processId = getpid();
-#endif
-    QByteArray s(QTime::currentTime().toString("HH:mm:ss.zzz").toLatin1());
-    s += " [";
-    s += QByteArray::number(processId);
-    s += "] ";
-
-    if (!f) {
-#if defined(Q_OS_WIN32)
-        f = new QFile("c:/service-debuglog.txt");
-#else
-        f = new QFile("/tmp/service-debuglog.txt");
-#endif
-        if (!f->open(QIODevice::WriteOnly | QIODevice::Append)) {
-            delete f;
-            f = 0;
-            return;
-        }
-        QByteArray ps('\n' + s + "--- DEBUG LOG OPENED ---\n");
-        f->write(ps);
-    }
-
-    switch (type) {
-    case QtWarningMsg:
-        s += "WARNING: ";
-        break;
-    case QtCriticalMsg:
-        s += "CRITICAL: ";
-        break;
-    case QtFatalMsg:
-        s+= "FATAL: ";
-        break;
-    case QtDebugMsg:
-        s += "DEBUG: ";
-        break;
-    default:
-        // Nothing
-        break;
-    }
-
-#if QT_VERSION >= 0x050400
-    s += qFormatLogMessage(type, context, msg).toLocal8Bit();
-#elif QT_VERSION >= 0x050000
-    s += msg.toLocal8Bit();
-    Q_UNUSED(context)
-#else
-    s += msg;
-#endif
-    s += '\n';
-
-    f->write(s);
-    f->flush();
-
-    if (type == QtFatalMsg) {
-        qtServiceCloseDebugLog();
-        exit(1);
-    }
-}
-
-#endif
 
 /*!
     \class QtServiceController
@@ -319,7 +220,7 @@ bool QtServiceController::install(const QString &serviceFilePath, const QString 
                 const QString &password)
 {
     QStringList arguments;
-    arguments << QLatin1String("-i");
+    arguments << QStringLiteral("-i");
     arguments << account;
     arguments << password;
     return (QProcess::execute(serviceFilePath, arguments) == 0);
@@ -421,41 +322,46 @@ class QtServiceStarter : public QObject
 {
     Q_OBJECT
 public:
-    QtServiceStarter(QtServiceBasePrivate *service)
-        : QObject(), d_ptr(service) {}
-public slots:
+    QtServiceStarter(QObject *parent, QtServiceBasePrivate *service)
+        : QObject(parent), d_ptr(service) {}
+private:
+    QtServiceBasePrivate *d_ptr;
+public Q_SLOTS:
     void slotStart()
     {
         d_ptr->startService();
     }
-private:
-    QtServiceBasePrivate *d_ptr;
 };
 #include "qtservice.moc"
 
 QtServiceBase *QtServiceBasePrivate::instance = 0;
 
-QtServiceBasePrivate::QtServiceBasePrivate(const QString &name)
-    : startupType(QtServiceController::ManualStartup), serviceFlags(0), controller(name)
+QtServiceBasePrivate::QtServiceBasePrivate(QtServiceBase *base, const QString &name)
+    : q_ptr(base),
+      startupType(QtServiceController::ManualStartup),
+      serviceFlags(0),
+      controller(name),
+      sysd(nullptr)
 {
 
 }
 
-QtServiceBasePrivate::~QtServiceBasePrivate()
-{
-
-}
+QtServiceBasePrivate::~QtServiceBasePrivate() = default;
 
 void QtServiceBasePrivate::startService()
 {
-    q_ptr->start();
+    Q_Q(QtServiceBase);
+    q->start();
 }
 
 int QtServiceBasePrivate::run(bool asService, const QStringList &argList)
 {
+    Q_Q(QtServiceBase);
+
     int argc = argList.size();
     QVector<char *> argv(argc);
     QList<QByteArray> argvData;
+    argvData.reserve(argc);
     for (int i = 0; i < argc; ++i)
         argvData.append(argList.at(i).toLocal8Bit());
     for (int i = 0; i < argc; ++i)
@@ -464,7 +370,7 @@ int QtServiceBasePrivate::run(bool asService, const QStringList &argList)
     if (asService && !sysInit())
         return -1;
 
-    q_ptr->createApplication(argc, argv.data());
+    q->createApplication(argc, argv.data());
     QCoreApplication *app = QCoreApplication::instance();
     if (!app)
         return -1;
@@ -472,9 +378,9 @@ int QtServiceBasePrivate::run(bool asService, const QStringList &argList)
     if (asService)
         sysSetPath();
 
-    QtServiceStarter starter(this);
-    QTimer::singleShot(0, &starter, SLOT(slotStart()));
-    int res = q_ptr->executeApplication();
+    QtServiceStarter starter(nullptr,this);
+    QTimer::singleShot(0, &starter, &QtServiceStarter::slotStart);
+    int res = q->executeApplication();
     delete app;
 
     if (asService)
@@ -638,33 +544,22 @@ int QtServiceBasePrivate::run(bool asService, const QStringList &argList)
 */
 QtServiceBase::QtServiceBase(int argc, char **argv, const QString &name)
 {
-#if defined(QTSERVICE_DEBUG)
-#  if QT_VERSION >= 0x050000
-    qInstallMessageHandler(qtServiceLogDebug);
-#  else
-    qInstallMsgHandler(qtServiceLogDebug);
-#  endif
-    qAddPostRoutine(qtServiceCloseDebugLog);
-#endif
-
     Q_ASSERT(!QtServiceBasePrivate::instance);
     QtServiceBasePrivate::instance = this;
 
+    const int maxNameLength = 255;
+
     QString nm(name);
-    if (nm.length() > 255) {
-	qWarning("QtService: 'name' is longer than 255 characters.");
-	nm.truncate(255);
+    if (nm.length() > maxNameLength) {
+        qWarning("QtService: 'name' is longer than 255 characters.");
+        nm.truncate(maxNameLength);
     }
     if (nm.contains('\\')) {
-	qWarning("QtService: 'name' contains backslashes '\\'.");
-	nm.replace((QChar)'\\', (QChar)'\0');
+        qWarning("QtService: 'name' contains backslashes '\\'.");
+        nm.replace(QChar('\\'), QChar('\0'));
     }
 
-    d_ptr = new QtServiceBasePrivate(nm);
-    d_ptr->q_ptr = this;
-
-    d_ptr->serviceFlags = 0;
-    d_ptr->sysd = 0;
+    d_ptr.reset(new QtServiceBasePrivate(this,nm));
     for (int i = 0; i < argc; ++i)
         d_ptr->args.append(QString::fromLocal8Bit(argv[i]));
 }
@@ -681,8 +576,7 @@ QtServiceBase::QtServiceBase(int argc, char **argv, const QString &name)
 */
 QtServiceBase::~QtServiceBase()
 {
-    delete d_ptr;
-    QtServiceBasePrivate::instance = 0;
+    QtServiceBasePrivate::instance = nullptr;
 }
 
 /*!
@@ -692,7 +586,8 @@ QtServiceBase::~QtServiceBase()
 */
 QString QtServiceBase::serviceName() const
 {
-    return d_ptr->controller.serviceName();
+    Q_D(const QtServiceBase);
+    return d->controller.serviceName();
 }
 
 /*!
@@ -702,7 +597,8 @@ QString QtServiceBase::serviceName() const
 */
 QString QtServiceBase::serviceDescription() const
 {
-    return d_ptr->serviceDescription;
+    Q_D(const QtServiceBase);
+    return d->serviceDescription;
 }
 
 /*!
@@ -712,7 +608,8 @@ QString QtServiceBase::serviceDescription() const
 */
 void QtServiceBase::setServiceDescription(const QString &description)
 {
-    d_ptr->serviceDescription = description;
+    Q_D(QtServiceBase);
+    d->serviceDescription = description;
 }
 
 /*!
@@ -722,12 +619,14 @@ void QtServiceBase::setServiceDescription(const QString &description)
 */
 QtServiceController::StartupType QtServiceBase::startupType() const
 {
-    return d_ptr->startupType;
+    Q_D(const QtServiceBase);
+    return d->startupType;
 }
 
 bool QtServiceBase::isInstalled() const
 {
-    return d_ptr->controller.isInstalled();
+    Q_D(const QtServiceBase);
+    return d->controller.isInstalled();
 }
 
 /*!
@@ -737,7 +636,8 @@ bool QtServiceBase::isInstalled() const
 */
 void QtServiceBase::setStartupType(QtServiceController::StartupType type)
 {
-    d_ptr->startupType = type;
+    Q_D(QtServiceBase);
+    d->startupType = type;
 }
 
 /*!
@@ -748,7 +648,8 @@ void QtServiceBase::setStartupType(QtServiceController::StartupType type)
 */
 QtServiceBase::ServiceFlags QtServiceBase::serviceFlags() const
 {
-    return d_ptr->serviceFlags;
+    Q_D(const QtServiceBase);
+    return d->serviceFlags;
 }
 
 /*!
@@ -777,69 +678,69 @@ QtServiceBase::ServiceFlags QtServiceBase::serviceFlags() const
 */
 int QtServiceBase::exec()
 {
-    if (d_ptr->args.size() > 1) {
-        QString a =  d_ptr->args.at(1);
-        if (a == QLatin1String("-i") || a == QLatin1String("-install")) {
-            if (!d_ptr->controller.isInstalled()) {
+    Q_D(QtServiceBase);
+
+    if (d->args.size() > 1) {
+        QString a =  d->args.at(1);
+        if (a == QStringLiteral("-i") || a == QStringLiteral("-install")) {
+            if (!d->controller.isInstalled()) {
                 QString account;
                 QString password;
-                if (d_ptr->args.size() > 2)
-                    account = d_ptr->args.at(2);
-                if (d_ptr->args.size() > 3)
-                    password = d_ptr->args.at(3);
-                if (!d_ptr->install(account, password)) {
+                if (d->args.size() > 2)
+                    account = d->args.at(2);
+                if (d->args.size() > 3)
+                    password = d->args.at(3);
+                if (!d->install(account, password)) {
                     fprintf(stderr, "The service %s could not be installed\n", serviceName().toLatin1().constData());
                     return -1;
-                } else {
-                    printf("The service %s has been installed under: %s\n",
-                        serviceName().toLatin1().constData(), d_ptr->filePath().toLatin1().constData());
                 }
+                printf("The service %s has been installed under: %s\n",
+                       serviceName().toLatin1().constData(), d->filePath().toLatin1().constData());
             } else {
                 fprintf(stderr, "The service %s is already installed\n", serviceName().toLatin1().constData());
             }
             return 0;
-        } else if (a == QLatin1String("-u") || a == QLatin1String("-uninstall")) {
-            if (d_ptr->controller.isInstalled()) {
-                if (!d_ptr->controller.uninstall()) {
+        } else if (a == QStringLiteral("-u") || a == QStringLiteral("-uninstall")) {
+            if (d->controller.isInstalled()) {
+                if (!d->controller.uninstall()) {
                     fprintf(stderr, "The service %s could not be uninstalled\n", serviceName().toLatin1().constData());
                     return -1;
-                } else {
-                    printf("The service %s has been uninstalled.\n",
-                        serviceName().toLatin1().constData());
                 }
+                printf("The service %s has been uninstalled.\n",
+                       serviceName().toLatin1().constData());
             } else {
                 fprintf(stderr, "The service %s is not installed\n", serviceName().toLatin1().constData());
             }
             return 0;
-        } else if (a == QLatin1String("-v") || a == QLatin1String("-version")) {
+        } else if (a == QStringLiteral("-v") || a == QStringLiteral("-version")) {
             printf("The service\n"
-                "\t%s\n\t%s\n\n", serviceName().toLatin1().constData(), d_ptr->args.at(0).toLatin1().constData());
-            printf("is %s", (d_ptr->controller.isInstalled() ? "installed" : "not installed"));
-            printf(" and %s\n\n", (d_ptr->controller.isRunning() ? "running" : "not running"));
+                "\t%s\n\t%s\n\n", serviceName().toLatin1().constData(), d->args.at(0).toLatin1().constData());
+            printf("is %s", (d->controller.isInstalled() ? "installed" : "not installed"));
+            printf(" and %s\n\n", (d->controller.isRunning() ? "running" : "not running"));
             return 0;
-        } else if (a == QLatin1String("-e") || a == QLatin1String("-exec")) {
-            d_ptr->args.removeAt(1);
-            int ec = d_ptr->run(false, d_ptr->args);
+        } else if (a == QStringLiteral("-e") || a == QStringLiteral("-exec")) {
+            d->args.removeAt(1);
+            int ec = d->run(false, d->args);
             if (ec == -1)
                 qErrnoWarning("The service could not be executed.");
             return ec;
-        } else if (a == QLatin1String("-t") || a == QLatin1String("-terminate")) {
-            if (!d_ptr->controller.stop())
+        } else if (a == QStringLiteral("-t") || a == QStringLiteral("-terminate")) {
+            if (!d->controller.stop())
                 qErrnoWarning("The service could not be stopped.");
             return 0;
-        } else if (a == QLatin1String("-p") || a == QLatin1String("-pause")) {
-            d_ptr->controller.pause();
+        } else if (a == QStringLiteral("-p") || a == QStringLiteral("-pause")) {
+            d->controller.pause();
             return 0;
-        } else if (a == QLatin1String("-r") || a == QLatin1String("-resume")) {
-            d_ptr->controller.resume();
+        } else if (a == QStringLiteral("-r") || a == QStringLiteral("-resume")) {
+            d->controller.resume();
             return 0;
-        } else if (a == QLatin1String("-c") || a == QLatin1String("-command")) {
+        } else if (a == QStringLiteral("-c") || a == QStringLiteral("-command")) {
             int code = 0;
-            if (d_ptr->args.size() > 2)
-                code = d_ptr->args.at(2).toInt();
-            d_ptr->controller.sendCommand(code);
+            if (d->args.size() > 2)
+                code = d->args.at(2).toInt();
+            d->controller.sendCommand(code);
             return 0;
-        } else  if (a == QLatin1String("-h") || a == QLatin1String("-help")) {
+        } else  if (a == QStringLiteral("-h") || a == QStringLiteral("-help")) {
             printf("\n%s -[i|u|e|s|v|h]\n"
                    "\t-i(nstall) [account] [password]\t: Install the service, optionally using given account and password\n"
                    "\t-u(ninstall)\t: Uninstall the service.\n"
@@ -849,20 +750,12 @@ int QtServiceBase::exec()
                    "\t-v(ersion)\t: Print version and status information.\n"
                    "\t-h(elp)   \t: Show this help\n"
                    "\tNo arguments\t: Start the service.\n",
-                   d_ptr->args.at(0).toLatin1().constData());
+                   d->args.at(0).toLatin1().constData());
             return 0;
         }
     }
-#if defined(Q_OS_UNIX)
-    if (::getenv("QTSERVICE_RUN")) {
-        // Means we're the detached, real service process.
-        int ec = d_ptr->run(true, d_ptr->args);
-        if (ec == -1)
-            qErrnoWarning("The service failed to run.");
-        return ec;
-    }
-#endif
-    if (!d_ptr->start()) {
+
+    if (!d->start()) {
         fprintf(stderr, "The service %s could not start\n", serviceName().toLatin1().constData());
         return -4;
     }
@@ -961,8 +854,9 @@ void QtServiceBase::resume()
 
     \sa QtServiceController::sendCommand()
 */
-void QtServiceBase::processCommand(int /*code*/)
+void QtServiceBase::processCommand(int code)
 {
+    Q_UNUSED(code)
 }
 
 /*!
