@@ -72,7 +72,6 @@ public:
     virtual ~QtServiceBasePrivate();
 
     void startService();
-    int run(bool asService, const QStringList &argList);
     bool install(const QString &account, const QString &password) const;
 
     bool start();

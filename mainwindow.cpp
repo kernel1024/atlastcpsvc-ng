@@ -3,9 +3,11 @@
 #include <QSslCertificate>
 #include <QFileDialog>
 #include <QInputDialog>
+#include <QRegularExpression>
 #include "mainwindow.h"
 #include "atlas.h"
 #include "service.h"
+#include "qsl.h"
 #include "ui_mainwindow.h"
 #include "ui_logindlg.h"
 
@@ -16,17 +18,21 @@ CMainWindow::CMainWindow(QWidget *parent) :
     ui->setupUi(this);
     setWindowIcon(QIcon(":/icons/trans.png"));
 
+    ui->editHost->setInputMask(QSL("000.000.000.000"));
+    const QString ipRange = "(?:[0-1]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])";
+    QRegularExpression ipRegex (QSL("^%1\\.%2\\.%3\\.%4$").arg(ipRange,ipRange,ipRange,ipRange));
+    auto *ipValidator = new QRegularExpressionValidator(ipRegex, this);
+    ui->editHost->setValidator(ipValidator);
+
     connect(ui->btnAddToken,&QPushButton::clicked,this,&CMainWindow::addToken);
     connect(ui->btnDeleteToken,&QPushButton::clicked,this,&CMainWindow::delToken);
     connect(ui->btnClearCert,&QPushButton::clicked,this,&CMainWindow::clearCert);
     connect(ui->btnClearKey,&QPushButton::clicked,this,&CMainWindow::clearKey);
     connect(ui->btnLoadCert,&QPushButton::clicked,this,&CMainWindow::loadCert);
     connect(ui->btnLoadKey,&QPushButton::clicked,this,&CMainWindow::loadKey);
-#ifdef qOverload
-    connect(ui->spinPort,qOverload<int>(&QSpinBox::valueChanged),this,&MainWindow::updatePort);
-    connect(ui->listEnvironment,qOverload<int>(&QComboBox::currentIndexChanged),
-            this,&MainWindow::changeEnvironment);
-#endif
+    connect(ui->spinPort,qOverload<int>(&QSpinBox::valueChanged),this,&CMainWindow::updatePort);
+    connect(ui->editHost,&QLineEdit::editingFinished,this,&CMainWindow::updateHost);
+    connect(ui->listEnvironment,&QComboBox::currentTextChanged,this,&CMainWindow::changeEnvironment);
     connect(ui->btnSave,&QPushButton::clicked,this,&CMainWindow::saveSettings);
     connect(ui->btnSvcInstall,&QPushButton::clicked,this,&CMainWindow::installSerivce);
     connect(ui->btnSvcUninstall,&QPushButton::clicked,this,&CMainWindow::uninstallSerivce);
@@ -53,6 +59,14 @@ void CMainWindow::updateService(CService *service)
         return;
     }
 
+    if (!m_service->daemon()->isListening()) {
+        if (!m_service->daemon()->start() || !m_service->daemon()->isListening()) {
+            QMessageBox::warning(nullptr,QGuiApplication::applicationDisplayName(),
+                                 tr("Unable to start ATLAS server in interactive mode.\n"
+                                    "TCP socket is busy (by service) or incorrect network settings."));
+        }
+    }
+
     updateWidgets();
 }
 
@@ -69,6 +83,7 @@ void CMainWindow::updateWidgets()
     const auto daemon = m_service->daemon();
 
     ui->spinPort->setValue(daemon->atlasPort());
+    ui->editHost->setText(daemon->atlasHost().toString());
 
     const QStringList env = daemon->atlasEnvironments();
     ui->listEnvironment->addItems(env);
@@ -217,6 +232,21 @@ void CMainWindow::updatePort(int port)
     if (m_service == nullptr) return;
 
     m_service->daemon()->setAtlasPort(port);
+}
+
+void CMainWindow::updateHost()
+{
+    if (m_service == nullptr) return;
+
+    const QHostAddress addr(ui->editHost->text());
+    if (addr.isNull() || addr.isBroadcast() || addr.isMulticast()) {
+        QMessageBox::warning(this,QGuiApplication::applicationDisplayName(),
+                             tr("Incorrect host specified."));
+        return;
+    }
+
+    //TODO: debug this
+    m_service->daemon()->setAtlasHost(addr);
 }
 
 void CMainWindow::changeEnvironment(const QString &env)

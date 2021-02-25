@@ -6,19 +6,16 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>616</width>
-    <height>347</height>
+    <width>601</width>
+    <height>315</height>
    </rect>
   </property>
-  <property name="windowTitle">
-   <string>AtlasTCPSvc-NG</string>
-  </property>
   <widget class="QWidget" name="centralWidget">
-   <layout class="QVBoxLayout" name="verticalLayout_4">
+   <layout class="QVBoxLayout" name="verticalLayout_3">
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_5">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <layout class="QVBoxLayout" name="verticalLayout_3">
+       <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
          <widget class="QGroupBox" name="groupBox_3">
           <property name="title">
@@ -55,112 +52,117 @@
          </widget>
         </item>
         <item>
-         <layout class="QVBoxLayout" name="verticalLayout_2">
-          <item>
-           <widget class="QGroupBox" name="groupBox">
-            <property name="title">
-             <string>SSL parameters</string>
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>SSL parameters</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label">
+             <property name="text">
+              <string>Private key</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="lblKey">
+             <property name="text">
+              <string>&lt;empty&gt;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QPushButton" name="btnLoadKey">
+             <property name="text">
+              <string>Load...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="3">
+            <widget class="QPushButton" name="btnClearKey">
+             <property name="text">
+              <string>Clear</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_2">
+             <property name="text">
+              <string>Certificate</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLabel" name="lblCert">
+             <property name="text">
+              <string>&lt;empty&gt;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QPushButton" name="btnLoadCert">
+             <property name="text">
+              <string>Load...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QPushButton" name="btnClearCert">
+             <property name="text">
+              <string>Clear</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_6">
+            <property name="text">
+             <string>TCP listening host</string>
             </property>
-            <layout class="QGridLayout" name="gridLayout">
-             <item row="0" column="0">
-              <widget class="QLabel" name="label">
-               <property name="text">
-                <string>Private key</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QLabel" name="lblKey">
-               <property name="text">
-                <string>&lt;empty&gt;</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QPushButton" name="btnLoadKey">
-               <property name="text">
-                <string>Load...</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="3">
-              <widget class="QPushButton" name="btnClearKey">
-               <property name="text">
-                <string>Clear</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="label_2">
-               <property name="text">
-                <string>Certificate</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QLabel" name="lblCert">
-               <property name="text">
-                <string>&lt;empty&gt;</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="2">
-              <widget class="QPushButton" name="btnLoadCert">
-               <property name="text">
-                <string>Load...</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="3">
-              <widget class="QPushButton" name="btnClearCert">
-               <property name="text">
-                <string>Clear</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <property name="buddy">
+             <cstring>editHost</cstring>
+            </property>
            </widget>
           </item>
-          <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_2">
-            <item>
-             <widget class="QLabel" name="label_3">
-              <property name="text">
-               <string>TCP listening port</string>
-              </property>
-              <property name="buddy">
-               <cstring>spinPort</cstring>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSpinBox" name="spinPort">
-              <property name="minimum">
-               <number>1</number>
-              </property>
-              <property name="maximum">
-               <number>65534</number>
-              </property>
-             </widget>
-            </item>
-           </layout>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="editHost"/>
           </item>
-          <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
-            <item>
-             <widget class="QLabel" name="label_4">
-              <property name="text">
-               <string>ATLAS environment</string>
-              </property>
-              <property name="buddy">
-               <cstring>listEnvironment</cstring>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QComboBox" name="listEnvironment"/>
-            </item>
-           </layout>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>TCP listening port</string>
+            </property>
+            <property name="buddy">
+             <cstring>spinPort</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="spinPort">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>65534</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>ATLAS environment</string>
+            </property>
+            <property name="buddy">
+             <cstring>listEnvironment</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="listEnvironment"/>
           </item>
          </layout>
         </item>
@@ -272,6 +274,7 @@
   <tabstop>btnClearKey</tabstop>
   <tabstop>btnLoadCert</tabstop>
   <tabstop>btnClearCert</tabstop>
+  <tabstop>editHost</tabstop>
   <tabstop>spinPort</tabstop>
   <tabstop>listEnvironment</tabstop>
   <tabstop>listTokens</tabstop>

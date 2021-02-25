@@ -77,7 +77,6 @@ public:
     bool stop();
     bool pause();
     bool resume();
-    bool sendCommand(int code);
 
 private:
     QtServiceControllerPrivate *d_ptr;
@@ -133,7 +132,6 @@ protected:
     virtual void stop();
     virtual void pause();
     virtual void resume();
-    virtual void processCommand(int code);
 
     virtual void createApplication(int &argc, char **argv) = 0;
 

@@ -23,7 +23,7 @@ public:
 
 private:
     Ui::MainWindow *ui { nullptr };
-    CService* m_service;
+    CService* m_service { nullptr };
     void updateSSLWidgets();
 
 public slots:
@@ -34,6 +34,7 @@ public slots:
     void clearKey();
     void clearCert();
     void updatePort(int port);
+    void updateHost();
     void changeEnvironment(const QString &env);
     void saveSettings();
     void installSerivce();

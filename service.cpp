@@ -28,9 +28,9 @@ void CService::logMessageHandler(QtMsgType type, const QMessageLogContext &conte
 
     QtServiceBase *service = QtServiceBase::instance();
     if (service)
-        service->logMessage(logMsg,svcType,1000);
+        service->logMessage(logMsg,svcType);
 
-    fprintf(stderr, "%s", logMsg.toLocal8Bit().constData()); // NOLINT
+    fprintf(stdout, "%s", logMsg.toLocal8Bit().constData()); // NOLINT
 }
 
 int CService::runAs(const QString& app, const QString& arguments, bool waitToFinish)
