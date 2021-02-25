@@ -6,10 +6,10 @@
 
 #if _WIN32 || _WIN64
     #ifdef _WIN64
-        #pragma error("Incompatible mode with 32bit ATLAS engine. Aborting.")
+        #error Incompatible mode with 32bit ATLAS engine. Aborting.
     #endif
 #else
-    #pragma error("Compile this source with MSVC 32bit compiler. Aborting.")
+    #error Compile this source with MSVC 32bit compiler. Aborting.
 #endif
 
 int main(int argc, char *argv[])
