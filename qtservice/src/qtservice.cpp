@@ -96,7 +96,7 @@ public Q_SLOTS:
 };
 #include "qtservice.moc"
 
-QtServiceBase *QtServiceBasePrivate::instance = nullptr;
+QtServiceBase *QtServiceBasePrivate::instance = nullptr; // NOLINT
 
 QtServiceBasePrivate::QtServiceBasePrivate(QtServiceBase *base, const QString &name)
     : q_ptr(base),

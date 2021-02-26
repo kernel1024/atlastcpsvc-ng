@@ -378,7 +378,7 @@ public:
     SERVICE_STATUS_HANDLE serviceStatus {};
     QStringList serviceArgs;
 
-    static QtServiceSysPrivate *instance;
+    static QtServiceSysPrivate *instance; // NOLINT
 
     QWaitCondition condition;
     QMutex mutex;
@@ -401,7 +401,7 @@ void QtServiceControllerHandler::customEvent(QEvent *e)
 }
 
 
-QtServiceSysPrivate *QtServiceSysPrivate::instance = nullptr;
+QtServiceSysPrivate *QtServiceSysPrivate::instance = nullptr; // NOLINT
 
 QtServiceSysPrivate::QtServiceSysPrivate()
 {
@@ -616,26 +616,6 @@ public:
     };
 };
 
-Q_GLOBAL_STATIC(QtServiceAppEventFilter, qtServiceAppEventFilter)
-
-/* There are three ways we can be started:
-
-   - By a service controller (e.g. the Services control panel), with
-   no (service-specific) arguments. ServiceBase::exec() will then call
-   start() below, and the service will start.
-
-   - From the console, but with no (service-specific) arguments. This
-   means we should ask a controller to start the service (i.e. another
-   instance of this executable), and then just terminate. We discover
-   this case (as different from the above) by the fact that
-   StartServiceCtrlDispatcher will return an error, instead of blocking.
-
-   - From the console, with -e(xec) argument. ServiceBase::exec() will
-   then call ServiceBasePrivate::exec(), which calls
-   ServiceBasePrivate::run(), which runs the application as a normal
-   program.
-*/
-
 bool QtServiceBasePrivate::start()
 {
     sysInit();
@@ -676,7 +656,8 @@ bool QtServiceBasePrivate::start()
     if (!app)
         return false;
 
-    QAbstractEventDispatcher::instance()->installNativeEventFilter(qtServiceAppEventFilter());
+    QScopedPointer<QtServiceAppEventFilter> eventFilter(new QtServiceAppEventFilter());
+    QAbstractEventDispatcher::instance()->installNativeEventFilter(eventFilter.data());
 
     sys->controllerHandler = new QtServiceControllerHandler(nullptr,sys);
 
