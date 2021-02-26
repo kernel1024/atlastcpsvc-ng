@@ -15,12 +15,12 @@ void CAtlasSocket::setAuthenticated(bool authenticated)
     m_authenticated = authenticated;
 }
 
-CAtlasServer::AtlasDirection CAtlasSocket::direction() const
+CAtlas::AtlasDirection CAtlasSocket::direction() const
 {
     return m_direction;
 }
 
-void CAtlasSocket::setDirection(CAtlasServer::AtlasDirection direction)
+void CAtlasSocket::setDirection(CAtlas::AtlasDirection direction)
 {
     m_direction = direction;
 }

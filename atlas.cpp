@@ -20,11 +20,6 @@
 #include "atlas.h"
 #include "qsl.h"
 
-// TODO: move from globals to singleton
-
-QMutex atlasMutex;
-QMutex atlasInitMutex;
-
 QByteArray toSJIS(const QString &str)
 {
     QByteArray res("ERROR");
@@ -34,7 +29,7 @@ QByteArray toSJIS(const QString &str)
         return res;
     }
     QTextEncoder *encoderWithoutBom = codec->makeEncoder( QTextCodec::IgnoreHeader );
-    res  = encoderWithoutBom ->fromUnicode( str );
+    res = encoderWithoutBom->fromUnicode( str );
     delete encoderWithoutBom;
     res.append('\0'); res.append('\0');
     return res;
@@ -49,56 +44,35 @@ QString fromSJIS(const QByteArray &str)
         return res;
     }
     QTextDecoder *decoderWithoutBom = codec->makeDecoder( QTextCodec::IgnoreHeader );
-    res  = decoderWithoutBom->toUnicode( str );
+    res = decoderWithoutBom->toUnicode( str );
     delete decoderWithoutBom;
     return res;
 }
 
-// ATLAS API
-// dir is 1 for jap to eng, 2 for eng to jap.
-//typedef int __cdecl CreateEngineType(int x, int dir, int x3, char* x4);
-using CreateEngineType = int __cdecl (int x, int dir, int x3, char* x4);
-static CreateEngineType *CreateEngine = nullptr;
-
-//typedef int __cdecl DestroyEngineType();
-using DestroyEngineType = int __cdecl ();
-static DestroyEngineType *DestroyEngine = nullptr;
-
-//typedef int __cdecl TranslatePairType(char* in, char **out, void **dunno, unsigned int *maybeSize);
-using TranslatePairType = int __cdecl (char* in, char **out, void **dunno, unsigned int *maybeSize);
-static TranslatePairType *TranslatePair = nullptr;
-
-//typedef int __cdecl AtlInitEngineDataType(int x1, int x2, int *x3, int x4, int *x5);
-using AtlInitEngineDataType = int __cdecl (int x1, int x2, int *x3, int x4, int *x5);
-static AtlInitEngineDataType *AtlInitEngineData = nullptr;
-
-using FreeAtlasDataType = int __cdecl (void *mem, void *noSureHowManyArgs, void *, void *);
-static FreeAtlasDataType *FreeAtlasData = nullptr;
-
-int CAtlasServer::getVersion() const
+int CAtlas::getVersion() const
 {
     return m_atlasVersion;
 }
 
-CAtlasServer::CAtlasServer(QObject *parent)
+CAtlas::CAtlas(QObject *parent)
     : QObject(parent)
 {
 }
 
-CAtlasServer::~CAtlasServer()
+CAtlas::~CAtlas()
 {
     if (isLoaded())
         uninit();
 }
 
-int CAtlasServer::getTransDirection() const
+int CAtlas::getTransDirection() const
 {
     return m_atlasTransDirection;
 }
 
-void CAtlasServer::uninit()
+void CAtlas::uninit()
 {
-    atlasInitMutex.lock();
+    m_atlasInitMutex.lock();
 
     m_atlasTransDirection = Atlas_JE;
     m_internalDirection = Atlas_JE;
@@ -123,10 +97,10 @@ void CAtlasServer::uninit()
 
     m_atlasHappy = false;
 
-    atlasInitMutex.unlock();
+    m_atlasInitMutex.unlock();
 }
 
-bool CAtlasServer::haveJapanese(const QString &str)
+bool CAtlas::haveJapanese(const QString &str)
 {
     return std::any_of(str.constBegin(),str.constEnd(),[](QChar c){
         constexpr ushort lowHiragana = 0x3040;
@@ -144,13 +118,13 @@ bool CAtlasServer::haveJapanese(const QString &str)
     });
 }
 
-QString CAtlasServer::translate(AtlasDirection transDirection, const QString &str)
+QString CAtlas::translate(AtlasDirection transDirection, const QString &str)
 {
     QString res = QSL("ERR");
 
     if (!isLoaded()) return res;
 
-    QMutexLocker locker(&atlasMutex);
+    QMutexLocker locker(&m_atlasMutex);
 
     AtlasDirection od = m_internalDirection;
     if (m_atlasTransDirection != transDirection) {
@@ -181,7 +155,7 @@ QString CAtlasServer::translate(AtlasDirection transDirection, const QString &st
         }
     }
 
-    char *outjis = nullptr; // NOLINT
+    char *outjis = nullptr;
     void *unsure = nullptr;
     unsigned int maybeSize = 0U;
     QByteArray injis = toSJIS(str);
@@ -204,7 +178,7 @@ QString CAtlasServer::translate(AtlasDirection transDirection, const QString &st
     return res;
 }
 
-QStringList CAtlasServer::getEnvironments()
+QStringList CAtlas::getEnvironments()
 {
     QStringList res;
     if (!isLoaded()) return res;
@@ -225,7 +199,7 @@ QStringList CAtlasServer::getEnvironments()
     return res;
 }
 
-bool CAtlasServer::loadDLLs()
+bool CAtlas::loadDLLs()
 {
     if (isDLLsLoaded())
         return true;
@@ -257,19 +231,19 @@ bool CAtlasServer::loadDLLs()
     return false;
 }
 
-bool CAtlasServer::isLoaded() const
+bool CAtlas::isLoaded() const
 {
     return m_atlasHappy;
 }
 
-bool CAtlasServer::isDLLsLoaded() const
+bool CAtlas::isDLLsLoaded() const
 {
     return (h_atlecont != nullptr) &&
             (h_awdict != nullptr) &&
             (h_awuenv != nullptr);
 }
 
-bool CAtlasServer::init(AtlasDirection transDirection, const QString& environment, bool forceDirectionChange)
+bool CAtlas::init(AtlasDirection transDirection, const QString& environment, bool forceDirectionChange)
 {
     AtlasDirection md = m_atlasTransDirection;
 
@@ -278,7 +252,7 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
 
     if (!loadDLLs()) return false;
 
-    atlasInitMutex.lock();
+    m_atlasInitMutex.lock();
 
     if (isDLLsLoaded() &&
             (CreateEngine = reinterpret_cast<CreateEngineType *>(GetProcAddress(h_atlecont,"CreateEngine"))) &&
@@ -291,8 +265,8 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
         m_environment = environment;
         try {
             const int dunnoSize = 1000;
-            static std::array<int,dunnoSize> dunno1 = {0};
-            static std::array<int,dunnoSize> dunno2 = {0};
+            std::array<int,dunnoSize> dunno1 {};
+            std::array<int,dunnoSize> dunno2 {};
             QByteArray env = toSJIS(m_environment);
 
             if (0 == AtlInitEngineData(0, 2, dunno1.data(), 0, dunno2.data()) &&
@@ -305,14 +279,14 @@ bool CAtlasServer::init(AtlasDirection transDirection, const QString& environmen
                 }
                 m_internalDirection = transDirection;
                 m_atlasHappy = true;
-                atlasInitMutex.unlock();
+                m_atlasInitMutex.unlock();
                 return true;
             }
         } catch (const std::exception& ex) {
             qCritical() << "ATLAS initialization exception handled: " << ex.what();
         }
     }
-    atlasInitMutex.unlock();
+    m_atlasInitMutex.unlock();
     uninit();
     return false;
 }

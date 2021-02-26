@@ -10,6 +10,7 @@ Checks:          '-*,bugprone-*,cppcoreguidelines-*,misc-*,performance-*,readabi
 -modernize-return-braced-init-list,
 -modernize-use-trailing-return-type,
 -modernize-pass-by-value,
+-modernize-use-nodiscard,
 -misc-no-recursion,
 -readability-convert-member-functions-to-static'
 

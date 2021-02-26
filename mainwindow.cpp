@@ -3,7 +3,6 @@
 #include <QSslCertificate>
 #include <QFileDialog>
 #include <QInputDialog>
-#include <QRegularExpression>
 #include "mainwindow.h"
 #include "atlas.h"
 #include "service.h"
@@ -19,10 +18,6 @@ CMainWindow::CMainWindow(QWidget *parent) :
     setWindowIcon(QIcon(":/icons/trans.png"));
 
     ui->editHost->setInputMask(QSL("000.000.000.000"));
-    const QString ipRange = "(?:[0-1]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])";
-    QRegularExpression ipRegex (QSL("^%1\\.%2\\.%3\\.%4$").arg(ipRange,ipRange,ipRange,ipRange));
-    auto *ipValidator = new QRegularExpressionValidator(ipRegex, this);
-    ui->editHost->setValidator(ipValidator);
 
     connect(ui->btnAddToken,&QPushButton::clicked,this,&CMainWindow::addToken);
     connect(ui->btnDeleteToken,&QPushButton::clicked,this,&CMainWindow::delToken);
@@ -240,12 +235,15 @@ void CMainWindow::updateHost()
 
     const QHostAddress addr(ui->editHost->text());
     if (addr.isNull() || addr.isBroadcast() || addr.isMulticast()) {
+        ui->editHost->blockSignals(true);
+        ui->editHost->setText(m_service->daemon()->atlasHost().toString());
+        ui->editHost->blockSignals(false);
+
         QMessageBox::warning(this,QGuiApplication::applicationDisplayName(),
                              tr("Incorrect host specified."));
         return;
     }
 
-    //TODO: debug this
     m_service->daemon()->setAtlasHost(addr);
 }
 

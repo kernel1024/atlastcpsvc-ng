@@ -104,7 +104,6 @@ QtServiceBasePrivate::QtServiceBasePrivate(QtServiceBase *base, const QString &n
       controller(name),
       sysd(nullptr)
 {
-
 }
 
 QtServiceBasePrivate::~QtServiceBasePrivate() = default;

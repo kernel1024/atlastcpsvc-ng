@@ -11,12 +11,12 @@
 CServer::CServer(QObject *parent)
     : QTcpServer(parent),
     m_atlasHost(QHostAddress(CDefaults::atlHost)),
-    m_atlas(new CAtlasServer(this))
+    m_atlas(new CAtlas(this))
 {
     loadSettings();
     connect(this, &QTcpServer::newConnection, this, &CServer::acceptConnections);
 
-    if (!m_atlas->init(CAtlasServer::Atlas_JE, m_atlasEnv))
+    if (!m_atlas->init(CAtlas::Atlas_JE, m_atlasEnv))
         qCritical() << "Unable to load ATLAS engine";
 }
 
@@ -222,7 +222,7 @@ void CServer::readClient()
             token.remove(0,cmdInit.length());
             if (m_clientTokens.contains(token)) {
                 socket->setAuthenticated(true);
-                socket->setDirection(CAtlasServer::Atlas_JE);
+                socket->setDirection(CAtlas::Atlas_JE);
                 socket->write("OK\r\n");
             } else {
                 socket->write("ERR:NOT_AUTHORIZED\r\n");
@@ -235,11 +235,11 @@ void CServer::readClient()
                 QString dir = cmd.toUpper();
                 dir.remove(0,cmdDir.length());
                 if (dir.startsWith(QSL("JE"))) {
-                    socket->setDirection(CAtlasServer::Atlas_JE);
+                    socket->setDirection(CAtlas::Atlas_JE);
                 } else if (dir.startsWith(QSL("EJ"))) {
-                    socket->setDirection(CAtlasServer::Atlas_EJ);
+                    socket->setDirection(CAtlas::Atlas_EJ);
                 } else {
-                    socket->setDirection(CAtlasServer::Atlas_Auto);
+                    socket->setDirection(CAtlas::Atlas_Auto);
                 }
                 socket->write("OK\r\n");
                 handled = true;

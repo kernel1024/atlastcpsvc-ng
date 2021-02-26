@@ -34,7 +34,7 @@ private:
     QStringList m_clientTokens;
     QString m_atlasEnv;
 
-    QPointer<CAtlasServer> m_atlas;
+    QPointer<CAtlas> m_atlas;
 
     void loadSettings();
 

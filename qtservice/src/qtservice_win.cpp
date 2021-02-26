@@ -563,8 +563,8 @@ public:
         : QThread(parent)
     {}
 
-    [[nodiscard]] bool calledOk() const { return success; }
-    [[nodiscard]] bool runningAsConsole() const { return console; }
+    bool calledOk() const { return success; }
+    bool runningAsConsole() const { return console; }
 
 protected:
     void run() override
@@ -604,20 +604,17 @@ class QtServiceAppEventFilter : public QAbstractNativeEventFilter
 public:
     QtServiceAppEventFilter() = default;
     ~QtServiceAppEventFilter() override = default;
-    bool nativeEventFilter(const QByteArray &eventType, void *message, long *result) override;
+    bool nativeEventFilter(const QByteArray &eventType, void *message, long *result) override {
+        Q_UNUSED(eventType)
+
+        MSG *winMessage = static_cast<MSG*>(message);
+        if ((winMessage->message == WM_ENDSESSION) && ((winMessage->lParam & ENDSESSION_LOGOFF) > 0)) {
+            *result = TRUE;
+            return true;
+        }
+        return false;
+    };
 };
-
-bool QtServiceAppEventFilter::nativeEventFilter(const QByteArray &eventType, void *message, long *result)
-{
-    Q_UNUSED(eventType)
-
-    MSG *winMessage = static_cast<MSG*>(message);
-    if ((winMessage->message == WM_ENDSESSION) && ((winMessage->lParam & ENDSESSION_LOGOFF) > 0)) {
-        *result = TRUE;
-        return true;
-    }
-    return false;
-}
 
 Q_GLOBAL_STATIC(QtServiceAppEventFilter, qtServiceAppEventFilter)
 

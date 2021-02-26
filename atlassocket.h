@@ -13,12 +13,12 @@ public:
     bool authenticated() const;
     void setAuthenticated(bool authenticated);
 
-    CAtlasServer::AtlasDirection direction() const;
-    void setDirection(CAtlasServer::AtlasDirection direction);
+    CAtlas::AtlasDirection direction() const;
+    void setDirection(CAtlas::AtlasDirection direction);
 
 private:
     bool m_authenticated { false };
-    CAtlasServer::AtlasDirection m_direction { CAtlasServer::Atlas_JE };
+    CAtlas::AtlasDirection m_direction { CAtlas::Atlas_JE };
 
 };
 
